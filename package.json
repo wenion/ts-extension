@@ -1,0 +1,16 @@
+{
+  "type": "module",
+  "scripts": {
+    "build:bg": "tsc -b tsconfig.background.json",
+    "build:cs": "tsc -b tsconfig.content.json",
+    "build": "tsc -b tsconfig.shared.json tsconfig.background.json tsconfig.content.json",
+    "watch:bg": "tsc -b -w tsconfig.background.json",
+    "watch:cs": "tsc -b -w tsconfig.content.json",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.12",
+    "chrome-types": "^0.1.379",
+    "typescript": "^5.9.2"
+  }
+}
