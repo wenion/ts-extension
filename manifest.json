@@ -13,5 +13,10 @@
       "all_frames": true
     }
   ],
-  "permissions": ["contextMenus", "storage", "tabs"]
+  "permissions": ["contextMenus", "storage", "tabs"],
+  "icons": {
+    "16": "mag16.png",
+    "48": "mag48.png",
+    "128": "mag128.png"
+  }
 }
