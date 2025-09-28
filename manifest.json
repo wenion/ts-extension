@@ -1,10 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Trace Capture Extension",
+  "description": "Trace Capture Extension",
   "version": "1.0.0",
   "background": {
     "service_worker": "background.js",
     "type": "module"
+  },
+  "action": {
+    "default_popup": "dist/index.html"
   },
   "content_scripts": [
     {
