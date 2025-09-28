@@ -1,0 +1,8 @@
+{
+  "PAGE_TAG": "MY_PAGE",
+  "EXT_TAG": "MY_EXTENSION",
+  "ALLOWED_ORIGINS": [
+    "http://localhost:3000",
+    "https://yourdomain.com"
+  ]
+}

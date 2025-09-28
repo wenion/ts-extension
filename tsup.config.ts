@@ -1,5 +1,6 @@
 import { defineConfig } from "tsup";
 import { cp, rename } from "node:fs/promises";
+import config from "./config.json";
 
 export default defineConfig([
   // Background as ESM (MV3 service worker)
@@ -26,6 +27,9 @@ export default defineConfig([
     sourcemap: true,
     target: "es2020",
     platform: "browser",
+    define: {
+        __MESSENGER_CONFIG__: JSON.stringify(config), // 👈 inject as global
+    },
     async onSuccess() {
       // Optional rename so you get content-script.js (no .global)
       await rename("build/content-script.global.js", "build/content-script.js").catch(() => {});
