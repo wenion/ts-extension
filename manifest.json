@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "My TS Extension",
+  "name": "Trace Capture Extension",
   "version": "1.0.0",
   "background": {
-    "service_worker": "dist/background/index.js",
+    "service_worker": "background.js",
     "type": "module"
   },
   "content_scripts": [
     {
-      "matches": ["https://*/*", "http://*/*"],
-      "js": ["dist/content-script/index.js"]
+      "matches": ["<all_urls>"],
+      "js": ["content-script.js"],
+      "all_frames": true
     }
   ],
-  "permissions": ["storage", "tabs"]
+  "permissions": ["contextMenus", "storage", "tabs"]
 }
