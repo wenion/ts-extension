@@ -5,16 +5,21 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type === "LOGIN") {
+  if (msg.type === "LOGIN") {
     chrome.storage.sync.set({ auth: msg.payload });
-  } else if (msg?.type === "LOGOUT") {
+  }
+  else if (msg.type === "LOGOUT") {
     chrome.storage.sync.remove("auth", () => {
       sendResponse({ ok: true, from: "background", at: now() });
     });
-  } else if (msg?.type === "get-storage") {
+  }
+  else if (msg.type === "get-storage") {
     chrome.storage.sync.get("auth", (data) => {
       sendResponse({ type: "storage-changed", name: "auth", payload: data.auth });
     });
+  }
+  else if (msg.type === "trace") {
+    // Simply log the trace data for now; could be extended to store or process
   }
   return true; // keep channel open for async
 });

@@ -1,4 +1,5 @@
 import { now } from "../shared/util";
+import { addEventListeners } from "./listenerEvent";
 
 console.log("[cs] injected at", now());
 
@@ -31,3 +32,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   sendResponse({ ok: true, from: "content-script", at: now() });
   return true; // keep channel open for async
 });
+
+// Add listeners to the main document
+addEventListeners(document);
