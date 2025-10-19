@@ -1,21 +1,23 @@
 import { now } from "../shared/util";
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("[bg] installed at", now());
+  console.log("[bg] installed at 222", now());
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === "LOGIN") {
-    chrome.storage.sync.set({ auth: msg.payload });
+    const session = msg.payload;
+    chrome.storage.sync.set({ "session": session });
   }
   else if (msg.type === "LOGOUT") {
-    chrome.storage.sync.remove("auth", () => {
+    console.log("[bg] LOGOUT", msg.payload);
+    chrome.storage.sync.remove("session", () => {
       sendResponse({ ok: true, from: "background", at: now() });
     });
   }
   else if (msg.type === "get-storage") {
-    chrome.storage.sync.get("auth", (data) => {
-      sendResponse({ type: "storage-changed", name: "auth", payload: data.auth });
+    chrome.storage.sync.get("session", (data) => {
+      sendResponse({ type: "storage-changed", name: "session", payload: data.session });
     });
   }
   else if (msg.type === "trace") {
@@ -27,8 +29,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "sync" && area !== "local") return;
 
-  const payload = changes.auth ? changes.auth.newValue : null;
-  const message = { type: "storage-changed", name: "auth", payload };
+  const payload = changes.session ? changes.session.newValue : null;
+  const message = { type: "storage-changed", name: "session", payload };
   try {
     chrome.runtime.sendMessage(message, () => {
       const err = chrome.runtime.lastError;

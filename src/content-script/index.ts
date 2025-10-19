@@ -1,7 +1,12 @@
 import { now } from "../shared/util";
 import { addEventListeners } from "./listenerEvent";
+import { captureChatGPTInteractions } from "./platform/chatgpt";
 
-console.log("[cs] injected at", now());
+const host = window.location.host;
+if (host === "chatgpt.com") {
+  captureChatGPTInteractions();
+}
+
 
 declare const __MESSENGER_CONFIG__: {
   PAGE_TAG: string;

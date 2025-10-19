@@ -9,7 +9,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
       const target = event.target;
       const data = {} as TraceBase;
       data.eventType = "pointerdown";
-      
+
       if (!target || !(target instanceof Element)) return;
 
       // Native Interactive Elements
