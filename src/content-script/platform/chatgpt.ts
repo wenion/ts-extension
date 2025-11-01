@@ -13,11 +13,24 @@ export function captureChatGPTInteractions() {
     if (lastArticle) {
       const turn = lastArticle.getAttribute("data-turn");
       const dataTestId = lastArticle.getAttribute("data-testid");
-      console.log(turn === "user" ? "ask" : "answer", timestamp, lastArticle.innerText);
+      // console.log(turn === "user" ? "ask" : "answer", timestamp, lastArticle.innerText);
+
+      chrome.runtime.sendMessage({
+        type: "trace",
+        payload: {
+          eventType: "chatgpt",
+          url: window.location.href,
+          tagName: "ARTICLE",
+          pageType: "chatgpt",
+          author: turn === "user" ? "human" : "AI",
+          message: lastArticle.innerText,
+          eventId: dataTestId,
+        }
+      });
     }
   };
 
-  const callback = (mutationList, observer) => {
+  const callback = (mutationList: MutationRecord[], observer: MutationObserver) => {
     for (const mutation of mutationList) {
       mutation.addedNodes.forEach((node) => {
         if (timeoutId) {
@@ -25,9 +38,9 @@ export function captureChatGPTInteractions() {
           timeoutId = null;
         }
 
-        if (node.nodeType === Node.ELEMENT_NODE && node.tagName === "ARTICLE") {
+        if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "ARTICLE") {
           eventFunc(new Date());
-          lastArticle = node;
+          lastArticle = node as HTMLElement;
         } else {
           timeoutId = setTimeout(eventFunc, 5000, new Date());
         }

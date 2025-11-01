@@ -18,6 +18,7 @@
     }
   ],
   "permissions": ["contextMenus", "storage", "tabs"],
+  "host_permissions": ["http://127.0.0.1:54321/*"],
   "icons": {
     "16": "mag16.png",
     "48": "mag48.png",

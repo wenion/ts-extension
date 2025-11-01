@@ -187,7 +187,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
       const target = event.target;
       const data = {} as TraceBase;
       data.eventType = "change";
-      
+
       if (!target || !(target instanceof Element)) return;
 
       if (target instanceof HTMLInputElement) {
@@ -241,7 +241,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         data.originValue = target.value;
         data.valueName = "value";
         data.valueType = "string";
-        
+
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
@@ -254,7 +254,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         data.name = target.name;
         data.innerText = target.innerText;
         data.textContent = target.textContent || "";
-        
+
         data.width = window.innerWidth;
         data.height = window.innerHeight;
         data.xpath = getXPath(target);
@@ -474,6 +474,29 @@ export function addEventListeners(doc: Document): TraceBase | void {
       data.shiftKey = event.shiftKey;
 
       data.timestamp = Date.now();
+
+      data.eventValue = data.key;
+
+      if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+        data.eventState = target.value;
+        data.cursorPosition = target.selectionStart ?? undefined;
+      } else {
+        function getCaretPositionInContentEditable(el: HTMLElement): number | null {
+          const selection = window.getSelection();
+          if (!selection || selection.rangeCount === 0) return null;
+
+          const range = selection.getRangeAt(0);
+          const preRange = range.cloneRange();
+          preRange.selectNodeContents(el);
+          preRange.setEnd(range.endContainer, range.endOffset);
+          return preRange.toString().length; // number of characters before caret
+        }
+        if (target instanceof HTMLElement&& target.isContentEditable) {
+          data.eventState = target.innerText;
+          const pos = getCaretPositionInContentEditable(target);
+          data.cursorPosition = pos === null ? undefined : pos;
+        }
+      }
 
       chrome.runtime.sendMessage({ type: "trace", payload: data });
     }

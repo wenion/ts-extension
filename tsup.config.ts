@@ -16,7 +16,8 @@ export default defineConfig([
     async onSuccess() {
       await cp("manifest.json", "build/manifest.json").catch(() => {});
       await cp("public", "build", { recursive: true }).catch(() => {});
-    }
+    },
+    noExternal: [/@supabase\//]
   },
   // Content script as classic script (IIFE)
   {

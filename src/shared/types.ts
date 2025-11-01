@@ -35,4 +35,10 @@ export type TraceBase = {
   ctrlKey: boolean; // for keyboard event
   metaKey: boolean; // for keyboard event
   shiftKey: boolean; // for keyboard event
+
+  message?: string;
+  eventValue?: string;
+  eventState?: string;
+  eventId?: string;
+  cursorPosition?: number;
 };
