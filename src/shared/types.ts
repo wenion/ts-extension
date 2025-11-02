@@ -41,4 +41,7 @@ export type TraceBase = {
   eventState?: string;
   eventId?: string;
   cursorPosition?: number;
+
+  pageType?: string;
+  author?: string;
 };

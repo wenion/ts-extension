@@ -432,15 +432,15 @@ export function addEventListeners(doc: Document): TraceBase | void {
     )
   );
 
-  document.addEventListener(
+  doc.addEventListener(
     "copy",
     (event: ClipboardEvent) => {
-      const selection = document.getSelection();
+      const selection = doc.getSelection();
       if (!selection) return;
     }
   );
 
-  document.addEventListener(
+  doc.addEventListener(
     "paste",
     (event: ClipboardEvent) => {
       const clipboardData = event.clipboardData;
@@ -449,7 +449,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
     }
   );
 
-  document.addEventListener(
+  doc.addEventListener(
     "keydown",
     (event: KeyboardEvent) => {
       const target = event.target;
@@ -476,6 +476,10 @@ export function addEventListeners(doc: Document): TraceBase | void {
       data.timestamp = Date.now();
 
       data.eventValue = data.key;
+      data.eventState = data.textContent;
+
+      data.pageType = "AI";
+      data.author = "human";
 
       if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
         data.eventState = target.value;
@@ -501,6 +505,33 @@ export function addEventListeners(doc: Document): TraceBase | void {
       chrome.runtime.sendMessage({ type: "trace", payload: data });
     }
   );
+
+  doc.addEventListener("input", (event: Event) => {
+    const target = event.target;
+    const data = {} as TraceBase;
+    data.eventType = "input";
+
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      data.eventState = target.value;
+      data.cursorPosition = target.selectionStart ?? undefined;
+      data.textContent = target.textContent || "";
+      data.eventValue = (event as InputEvent).data ?? "";
+      data.eventState = data.textContent;
+      data.timestamp = Date.now();
+      data.xpath = getXPath(target as Element);
+      data.tag = (target as Element).tagName?.toLowerCase() || "";
+    }
+
+    if (target instanceof HTMLElement && target.isContentEditable) {
+      data.eventState = target.innerText;
+      data.eventValue = (event as InputEvent).data ?? "";
+
+      data.xpath = getXPath(target as Element);
+      data.tag = (target as Element).tagName?.toLowerCase() || "";
+
+    }
+    chrome.runtime.sendMessage({ type: "trace", payload: data });
+  });
 
   doc.addEventListener(
     "mouseenter",

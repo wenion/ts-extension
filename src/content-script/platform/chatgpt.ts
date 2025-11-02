@@ -13,7 +13,6 @@ export function captureChatGPTInteractions() {
     if (lastArticle) {
       const turn = lastArticle.getAttribute("data-turn");
       const dataTestId = lastArticle.getAttribute("data-testid");
-      // console.log(turn === "user" ? "ask" : "answer", timestamp, lastArticle.innerText);
 
       chrome.runtime.sendMessage({
         type: "trace",
