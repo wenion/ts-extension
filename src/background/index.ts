@@ -105,6 +105,10 @@ const eventHandler = async (
     lastMutation = trace;
   }
 
+  if (trace.event_type === "assistwriting") {
+    await supabaseActions.insert('Trace', trace);
+  }
+
   previous = trace;
 }
 

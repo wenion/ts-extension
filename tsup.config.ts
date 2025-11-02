@@ -15,6 +15,7 @@ export default defineConfig([
     clean: true,
     async onSuccess() {
       await cp("manifest.json", "build/manifest.json").catch(() => {});
+      await cp("injected.js", "build/injected.js").catch(() => {});
       await cp("public", "build", { recursive: true }).catch(() => {});
     },
     noExternal: [/@supabase\//]

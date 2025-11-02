@@ -33,6 +33,19 @@ const host = window.location.host;
 if (host === "chatgpt.com") {
   captureChatGPTInteractions();
 }
+else if (host === "docs.google.com") {
+  (function inject() {
+    const script = document.createElement("script");
+    script.src = chrome.runtime.getURL("injected.js");
+    // script.onload = function (this) {
+    //   this.remove();
+    // };
+    script.addEventListener("load", () => {
+      script.remove();
+    });
+    (document.head || document.documentElement).appendChild(script);
+  })();
+}
 
 const navigator = () => {
   const data = {

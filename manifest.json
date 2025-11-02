@@ -17,7 +17,13 @@
       "all_frames": true
     }
   ],
-  "permissions": ["contextMenus", "storage", "tabs"],
+  "permissions": ["contextMenus", "storage", "tabs", "scripting"],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["https://docs.google.com/*"]
+    }
+  ],
   "host_permissions": ["http://127.0.0.1:54321/*"],
   "icons": {
     "16": "mag16.png",
