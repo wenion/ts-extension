@@ -18,10 +18,10 @@ export function captureChatGPTInteractions() {
       chrome.runtime.sendMessage({
         type: "trace",
         payload: {
-          eventType: "chatgpt",
+          eventType: "mutation",
           url: window.location.href,
           tagName: "ARTICLE",
-          pageType: "chatgpt",
+          pageType: "AI",
           author: turn === "user" ? "human" : "AI",
           message: lastArticle.innerText,
           eventId: dataTestId,
