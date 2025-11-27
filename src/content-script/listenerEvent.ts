@@ -437,6 +437,22 @@ export function addEventListeners(doc: Document): TraceBase | void {
     (event: ClipboardEvent) => {
       const selection = doc.getSelection();
       if (!selection) return;
+      const data = {} as TraceBase;
+      data.eventType = "copy";
+      data.subType = "";
+      data.tag = "";
+      data.name = "";
+      data.innerText = "";
+      data.textContent = selection.toString();
+      data.clientX = 0;
+      data.clientY = 0;
+      data.width = window.innerWidth;
+      data.height = window.innerHeight;
+      data.xpath = "";
+      data.eventState = selection.toString();
+      data.message = selection.toString();
+
+      chrome.runtime.sendMessage({ type: "trace", payload: data });
     }
   );
 
@@ -446,6 +462,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
       const clipboardData = event.clipboardData;
       if (!clipboardData) return;
       const pastedData = clipboardData.getData('Text');
+      console.log("Pasted text:", pastedData);
     }
   );
 
@@ -482,7 +499,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
       data.author = "human";
 
       if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
-        data.eventState = target.value;
+        // data.eventState = target.value;
         data.cursorPosition = target.selectionStart ?? undefined;
       } else {
         function getCaretPositionInContentEditable(el: HTMLElement): number | null {
@@ -496,11 +513,13 @@ export function addEventListeners(doc: Document): TraceBase | void {
           return preRange.toString().length; // number of characters before caret
         }
         if (target instanceof HTMLElement&& target.isContentEditable) {
-          data.eventState = target.innerText;
+          // data.eventState = target.innerText;
           const pos = getCaretPositionInContentEditable(target);
           data.cursorPosition = pos === null ? undefined : pos;
         }
       }
+
+      console.log("Keyboard Data:", data.eventType, data.key, data.code, data.eventState);
 
       chrome.runtime.sendMessage({ type: "trace", payload: data });
     }
@@ -530,6 +549,8 @@ export function addEventListeners(doc: Document): TraceBase | void {
       data.tag = (target as Element).tagName?.toLowerCase() || "";
 
     }
+    console.log("Input Data:", data.eventType, data.key, data.code, data.eventState);
+
     chrome.runtime.sendMessage({ type: "trace", payload: data });
   });
 

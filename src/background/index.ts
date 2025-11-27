@@ -57,6 +57,8 @@ const eventHandler = async (
     return;
   }
 
+  const subType = msg.payload.subType;
+
   const trace = {
     // user_id User identifier
     // session_id: Session identifier
@@ -69,6 +71,7 @@ const eventHandler = async (
     container_id: msg.payload.containerId,  // Identifier for the text field. Needed for when a page has multiple text fields (e.g., a form).
 
     event_type: msg.payload.eventType, // Type interface event
+    // sub_type: msg.payload.subType, // Type interface event
     message: msg.payload.message, // Full text content of prompt sent to AI; full text content of AI response
     cursor_position: msg.payload.cursorPosition, // Position of cursor in text container
 
@@ -87,14 +90,35 @@ const eventHandler = async (
   }
 
   // if previous event is keydown and current input
-  if (
-    previous.event_type === "keydown" &&
-    trace.event_type === "input" &&
-    previous.x_path === trace.x_path &&
-    previous.event_value === trace.event_value
-  ) {
-    previous.event_state = trace.event_state;
-    await supabaseActions.insert('Trace', previous);
+  // if (
+  //   previous.event_type === "keydown" &&
+  //   trace.event_type === "input" &&
+  //   previous.x_path === trace.x_path &&
+  //   previous.event_value === trace.event_value
+  // ) {
+  //   previous.event_state = trace.event_state;
+  //   console.log("previous", previous);
+  //   await supabaseActions.insert('Trace', previous);
+  // }
+  if (trace.event_type === "keydown") {
+    if (trace.event_value === "Backspace" || trace.event_value === "Delete") {
+      // Handle backspace key event
+      trace.event_type = "delete";
+    }
+    else {
+      trace.event_type = "insert";
+    }
+    await supabaseActions.insert('Trace', trace);
+  }
+
+  if (trace.event_type === "copy" || trace.event_type === "paste") {
+    // Handle input event
+    await supabaseActions.insert('Trace', trace);
+  }
+
+  if (trace.event_type === "input") {
+    // Handle input event
+    await supabaseActions.insert('Trace', trace);
   }
 
   if (trace.event_type === "mutation") {
@@ -106,7 +130,12 @@ const eventHandler = async (
   }
 
   if (trace.event_type === "assistwriting") {
-    await supabaseActions.insert('Trace', trace);
+    if (subType === "insert" || subType === "delete") {
+      trace.event_type = subType;
+      await supabaseActions.insert('Trace', trace);
+    } else {
+      await supabaseActions.insert('Trace', trace);
+    }
   }
 
   previous = trace;

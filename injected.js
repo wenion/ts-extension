@@ -1,3 +1,14 @@
+function postMessageToContentScript(data) {
+  window.postMessage(
+    {
+      source: "MY_PAGE",
+      type: "trace",
+      payload: data,
+    },
+    "*"
+  );
+}
+
 (function () {
   const host = location.host;
   if (host !== "docs.google.com") return;
@@ -32,11 +43,29 @@
             const ibi = content.ibi;
             const text = content.s;
             console.log("insert content:", text, "at index:", ibi);
+            const data = {
+              eventType: "assistwriting",
+              subType: "insert",
+              eventState: text,
+              cursorPosition: ibi,
+              pageType: "editor",
+              author: "human",
+            }
+            postMessageToContentScript(data)
           }
           else if (type === "ds") {
             const startIndex = content.si;
             const endIndex = content.ei;
             console.log("delete at index:", startIndex, "to", endIndex);
+            const data = {
+              eventType: "assistwriting",
+              subType: "delete",
+              eventState: "",
+              cursorPosition: startIndex,
+              pageType: "editor",
+              author: "human",
+            }
+            postMessageToContentScript(data)
           }
           else if (type === "mlti") {
             const mts = content.mts;
@@ -54,12 +83,14 @@
           const content = JSON.parse(body);
           const data = {
             eventType: "assistwriting",
+            subType: "content",
             eventState: content[0][0],
             pageType: "editor",
             author: "human",
           }
 
           console.log("Assist Writing Data:", data.eventState);
+          postMessageToContentScript(data);
 
           // window.postMessage(
           //   {
