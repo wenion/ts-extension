@@ -1,13 +1,18 @@
-import { TraceBase } from "../shared/types";
+import { 
+  MessageType,
+  UserEventTrace
+} from "../shared/types";
 import { getXPath } from './xpath';
 import { throttle } from './utils';
+import { getFormVisibleContainerId } from "../shared/util";
 
-export function addEventListeners(doc: Document): TraceBase | void {
+// user-driven events
+export const installUserEventTracker = (doc: Document) => {
   doc.addEventListener(
     "pointerdown",
     (event: PointerEvent) => {
       const target = event.target;
-      const data = {} as TraceBase;
+      const data = {} as UserEventTrace;
       data.eventType = "pointerdown";
 
       if (!target || !(target instanceof Element)) return;
@@ -52,7 +57,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof HTMLTextAreaElement) {
         const subType = target.type.toLowerCase();
@@ -75,7 +80,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof HTMLSelectElement) {
         const subType = target.type.toLowerCase();
@@ -100,7 +105,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof HTMLButtonElement) {
         const subType = target.type.toLowerCase();
@@ -122,7 +127,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof HTMLAnchorElement) {
         const subType = target.type.toLowerCase();
@@ -142,7 +147,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         data.valueType = typeof data.originValue;
 
         data.label = "";
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof HTMLDivElement) {
         data.tag = target.tagName.toLowerCase();
@@ -159,7 +164,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         data.valueName = "";
         data.valueType = "";
         data.label = "";
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof Element) {
         data.tag = target.tagName.toLowerCase();
@@ -177,7 +182,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         data.valueName = "";
         data.valueType = "";
         data.label = "";
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
   });
 
@@ -185,10 +190,12 @@ export function addEventListeners(doc: Document): TraceBase | void {
     "change",
     (event) => {
       const target = event.target;
-      const data = {} as TraceBase;
+      const data = {} as UserEventTrace;
       data.eventType = "change";
 
-      if (!target || !(target instanceof Element)) return;
+      if (!target || !(target instanceof HTMLElement)) return;
+
+      data.containerId = getFormVisibleContainerId(target);
 
       if (target instanceof HTMLInputElement) {
         const subType = target.type.toLowerCase();
@@ -222,7 +229,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof HTMLTextAreaElement) {
         const subType = target.type.toLowerCase();
@@ -245,7 +252,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof HTMLSelectElement) {
         const subType = target.type.toLowerCase();
@@ -269,7 +276,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof Element) {
         data.tag = target.tagName.toLowerCase();
@@ -289,9 +296,8 @@ export function addEventListeners(doc: Document): TraceBase | void {
         data.valueLabel = "";
         data.direction = "";
         data.label = "";
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
-
     }
   );
 
@@ -300,7 +306,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
     (event: Event) => {
       const target = event.target;
       if (!target || !(target instanceof Element)) return;
-      const data = {} as TraceBase;
+      const data = {} as UserEventTrace;
       data.eventType = "select";
 
       // Only input and textarea have selection
@@ -327,7 +333,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else if (target instanceof HTMLTextAreaElement ) {
         if (target.selectionStart === null || target.selectionEnd === null) return;
@@ -352,7 +358,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
         if (target.labels?.length) {
           data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
         }
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       }
       else {
         return;
@@ -369,7 +375,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
       const selection = document.getSelection();
       if (!selection) return;
 
-      const data = {} as TraceBase;
+      const data = {} as UserEventTrace;
       data.eventType = "mouseup";
       data.subType = "";
       data.tag = target.tagName.toLowerCase();
@@ -388,7 +394,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
       data.label = "";
       data.direction = selection.direction || "";
 
-      chrome.runtime.sendMessage({ type: "trace", payload: data });
+      chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
     }
   );
 
@@ -396,7 +402,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
     "scroll",
     throttle(
       (event) => {
-        const data = {} as TraceBase;
+        const data = {} as UserEventTrace;
         data.eventType = "scroll";
         
         data.clientX = window.scrollX;
@@ -406,7 +412,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
 
         data.timestamp = Date.now();
 
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       },
       500,
     )
@@ -416,7 +422,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
     "wheel",
     throttle(
       (event: WheelEvent) => {
-        const data = {} as TraceBase;
+        const data = {} as UserEventTrace;
         data.eventType = "wheel";
         
         data.clientX = window.scrollX;
@@ -426,7 +432,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
 
         data.timestamp = Date.now();
 
-        chrome.runtime.sendMessage({ type: "trace", payload: data });
+        chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
       },
       500,
     )
@@ -437,6 +443,22 @@ export function addEventListeners(doc: Document): TraceBase | void {
     (event: ClipboardEvent) => {
       const selection = doc.getSelection();
       if (!selection) return;
+      const data = {} as UserEventTrace;
+      data.eventType = "copy";
+      data.subType = "";
+      data.tag = "";
+      data.name = "";
+      data.innerText = "";
+      data.textContent = selection.toString();
+      data.clientX = 0;
+      data.clientY = 0;
+      data.width = window.innerWidth;
+      data.height = window.innerHeight;
+      data.xpath = "";
+      data.eventState = selection.toString();
+      data.message = selection.toString();
+
+      chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
     }
   );
 
@@ -453,8 +475,17 @@ export function addEventListeners(doc: Document): TraceBase | void {
     "keydown",
     (event: KeyboardEvent) => {
       const target = event.target;
-      const data = {} as TraceBase;
+      const data = {} as UserEventTrace;
       data.eventType = "keydown";
+
+      if (
+        !target ||
+        !(
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          (target instanceof HTMLElement && target.isContentEditable)
+        )
+      ) return;
 
       data.tag = (target as Element).tagName?.toLowerCase() || "";
       data.name = (target as any).name || "";
@@ -482,7 +513,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
       data.author = "human";
 
       if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
-        data.eventState = target.value;
+        // data.eventState = target.value;
         data.cursorPosition = target.selectionStart ?? undefined;
       } else {
         function getCaretPositionInContentEditable(el: HTMLElement): number | null {
@@ -495,20 +526,20 @@ export function addEventListeners(doc: Document): TraceBase | void {
           preRange.setEnd(range.endContainer, range.endOffset);
           return preRange.toString().length; // number of characters before caret
         }
-        if (target instanceof HTMLElement&& target.isContentEditable) {
-          data.eventState = target.innerText;
+        if (target instanceof HTMLElement && target.isContentEditable) {
+          // data.eventState = target.innerText;
           const pos = getCaretPositionInContentEditable(target);
           data.cursorPosition = pos === null ? undefined : pos;
         }
       }
 
-      chrome.runtime.sendMessage({ type: "trace", payload: data });
+      chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
     }
   );
 
   doc.addEventListener("input", (event: Event) => {
     const target = event.target;
-    const data = {} as TraceBase;
+    const data = {} as UserEventTrace;
     data.eventType = "input";
 
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
@@ -528,9 +559,9 @@ export function addEventListeners(doc: Document): TraceBase | void {
 
       data.xpath = getXPath(target as Element);
       data.tag = (target as Element).tagName?.toLowerCase() || "";
-
     }
-    chrome.runtime.sendMessage({ type: "trace", payload: data });
+
+    chrome.runtime.sendMessage({ type: MessageType.UserEvent, payload: data });
   });
 
   doc.addEventListener(
@@ -539,6 +570,7 @@ export function addEventListeners(doc: Document): TraceBase | void {
       const target = event.target;
     }
   );
+
   doc.addEventListener(
     "mouseleave",
     (event) => {
@@ -553,3 +585,26 @@ export function addEventListeners(doc: Document): TraceBase | void {
     }
   );
 }
+
+export const installNavigationTracker = () => {
+  const data = {
+    eventType: "navigation",
+    url: window.location.href,
+    eventTime: new Date().toISOString(),
+  };
+
+  chrome.runtime.sendMessage({ type: MessageType.NavigationEvent, payload: data });
+}
+
+// Used by different platforms
+export const installDomChangeTracker = (
+  target: Node,
+  config: MutationObserverInit,
+  callback: (mutationList: MutationRecord[], observer: MutationObserver) => void
+) => {
+  // Create an observer instance linked to the callback function
+  const observer = new MutationObserver(callback);
+
+  // Start observing the target node
+  observer.observe(target, config);
+};

@@ -1,12 +1,20 @@
 import { now } from "../shared/util";
-import { PopupToExtensionEvent } from "../shared/config/eventTypes";
 import { supabaseActions } from "./supabase/actions";
 
-let previous = {
+import {
+  ApiEventTrace,
+  DOMMutationEventTrace,
+  MessageType,
+  TraceRecord,
+  UserEventTrace
+} from "../shared/types";
+import { getPageType } from "../shared/util";
+
+let previous : TraceRecord = {
   url: "",
   page_type: "",
   author: "",
-  container_id: "",
+  container_id: 0,
   event_type: "",
   message: "",
   cursor_position: 0,
@@ -23,32 +31,126 @@ let previous = {
   x_path: "",
 };
 
-let lastMutation = {
-  url: "",
-  page_type: "",
-  author: "",
-  container_id: "",
-  event_type: "mutation",
-  message: "",
-  cursor_position: 0,
-  event_time: "",
-  event_value: "",
-  event_id: "",
-  event_state: "",
-  tag_name: "",
-  element_text: "",
-  offset_x: 0,
-  offset_y: 0,
-  width: 0,
-  height: 0,
-  x_path: "",
-}
+let lastMutation : TraceRecord = previous;
+let apiContent : string = "";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("[bg] installed at ", now());
 });
 
-const eventHandler = async (
+const handleUserEvent = async (
+  msg: {type: MessageType, payload: UserEventTrace},
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void
+) => {
+  if (!_sender.tab?.id || !_sender.tab?.url) {
+    return;
+  }
+
+  const trace : TraceRecord = {
+    url: _sender.tab.url,
+    page_type: getPageType(_sender.tab.url),
+    author: msg.payload.author ?? "other",
+    container_id: msg.payload.containerId ?? null,
+
+    event_type: msg.payload.eventType,
+    message: msg.payload.message?? null,
+    cursor_position: msg.payload.cursorPosition ?? null,
+
+    event_time: new Date().toISOString(),
+    event_value: msg.payload.eventValue?? null,
+    event_id: msg.payload.eventId?? null,
+    event_state: msg.payload.eventState?? null,
+
+    tag_name: msg.payload.tag,
+    element_text: "",
+    offset_x: msg.payload.clientX,
+    offset_y: msg.payload.clientY,
+    x_path: msg.payload.xpath,
+    width: msg.payload.width,
+    height: msg.payload.height,
+  }
+
+  const eventType = trace.event_type;
+  const trim = (v?: string | null) => (v ?? "").trim();
+
+  if (eventType === "pointerdown") {
+    trace.event_type = "click";
+    const tag = trace.tag_name;
+
+    if (tag === "input") {
+      trace.element_text =
+        trim(msg.payload.label) ||
+        trim(msg.payload.placeholder) ||
+        trim(msg.payload.name);
+    }
+    else if (tag === "textarea") {
+      trace.element_text =
+        trim(msg.payload.label) ||
+        trim(msg.payload.placeholder) ||
+        trim(msg.payload.name) ||
+        trim(msg.payload.innerText);
+    }
+    else if (tag === "select") {
+      trace.element_text =
+        trim(msg.payload.label) ||
+        trim(msg.payload.name) ||
+        trim(msg.payload.valueLabel);
+    }
+    else if (tag === "button" || tag === "a") {
+      trace.element_text =
+        trim(msg.payload.label) ||
+        trim(msg.payload.name) ||
+        trim(msg.payload.innerText);
+    }
+    else {
+      trace.element_text =
+        trim(msg.payload.label) ||
+        trim(msg.payload.innerText) ||
+        trim(msg.payload.textContent);
+    }
+
+    // await supabaseActions.insert('Trace', trace);
+  }
+  else if (eventType === "change") {
+  }
+  else if (eventType === "select") {
+  }
+  else if (eventType === "mouseup") {
+  }
+  else if (eventType === "scroll") {
+  }
+  else if (eventType === "wheel") {
+  }
+  else if (eventType === "copy") {
+  }
+  else if (eventType === "paste") {
+  }
+  else if (eventType === "keydown") {
+    if (trace.event_value === "Backspace" || trace.event_value === "Delete") {
+      trace.event_type = "delete";
+    }
+    else {
+      trace.event_type = "insert";
+    }
+  }
+  else if (eventType === "input") {
+    if (previous.event_type === "insert" || previous.event_type === "delete") {
+      previous.event_state = trace.event_state;
+      await supabaseActions.insert('Trace', previous);
+    }
+  }
+  else if (eventType === "mouseenter") {
+  }
+  else if (eventType === "mouseleave") {
+  }
+  else if (eventType === "blur") {
+  }
+
+  previous = trace;
+};
+
+const handleNavigationEvent = async (
   msg: any,
   _sender: chrome.runtime.MessageSender,
   sendResponse: (response?: any) => void
@@ -57,59 +159,154 @@ const eventHandler = async (
     return;
   }
 
-  const trace = {
-    // user_id User identifier
-    // session_id: Session identifier
-    // session_start: Start time after login or period of inactivity
-    // session_end: End time after period of inactivity or logout
+  const trace : TraceRecord = {
+    url: msg.payload.url,
+    page_type: getPageType(_sender.tab.url),
+    
+    author: null,
+    container_id: null,
 
-    url: msg.payload.url?? _sender.tab.url, //The base URL or page where the event happened (e.g., https://example.com/lesson1).
-    page_type: msg.payload.pageType, // Kind of URL (AI; editor; other)
-    author: msg.payload.author, // Subject or doer of the event human; AI; other
-    container_id: msg.payload.containerId,  // Identifier for the text field. Needed for when a page has multiple text fields (e.g., a form).
+    event_type: msg.payload.eventType,
+    message: null,
+    cursor_position: null,
 
-    event_type: msg.payload.eventType, // Type interface event
-    message: msg.payload.message, // Full text content of prompt sent to AI; full text content of AI response
-    cursor_position: msg.payload.cursorPosition, // Position of cursor in text container
+    event_time: msg.payload.eventTime,
+    event_value: null,
+    event_id: null,
+    event_state: null,
 
-    event_time: new Date().toISOString(), // Time of event
-    event_value: msg.payload.eventValue, // Most recently typed content in text field
-    event_id: msg.payload.eventId, // Identifier for the event
-    event_state: msg.payload.eventState, // Accumulated typed content
+    tag_name: null,
+    element_text: null,
+    offset_x: null,
+    offset_y: null,
+    x_path: null,
+    width: null,
+    height: null,
+  };
 
-    tag_name: msg.payload.tag, // The HTML tag where the event occurred
-    element_text: msg.payload.elementText, //The visible text of the element the user interacted with (e.g., button label or link text).
-    offset_x: msg.payload.clientX, // X-coordinate offset (relative to the viewport) where the event occurred.
-    offset_y: msg.payload.clientY, // Y-coordinate offset (relative to the viewport) where the event occurred.
-    x_path: msg.payload.xpath, // The full XPath of the DOM element, useful for uniquely identifying the element interacted with.
-    width: msg.payload.width, // The width of the viewport (in pixels)
-    height: msg.payload.height, // The height of the viewport (in pixels)
+  if (previous.event_type === "navigation" && previous.url === trace.url) {
+    previous = trace;
+    return;
   }
 
-  // if previous event is keydown and current input
+  await supabaseActions.insert('Trace', trace);
+  previous = trace;
+};
+
+export function extractTurnNumber(id?: string | null): string | null {
+  if (!id) return null;
+  const match = id.match(/conversation-turn-(\d+)/);
+  return match ? match[1] : null;
+}
+
+const handleDomMutationEvent = async (
+  msg: {type: MessageType, payload: DOMMutationEventTrace},
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void
+) => {
+  if (!_sender.tab?.id || !_sender.tab?.url) {
+    return;
+  }
+
+  const trace : TraceRecord = {
+    url: msg.payload.url,
+    page_type: msg.payload.pageType,
+    author: msg.payload.author,
+    container_id: null,
+
+    event_type: msg.payload.eventType,
+    message: msg.payload.message,
+    cursor_position: null,
+
+    event_time: msg.payload.eventTime,
+    event_value: null,
+    event_id: extractTurnNumber(msg.payload.eventId) ?? null,
+    event_state: null,
+
+    tag_name: msg.payload.tag,
+    element_text: msg.payload.eventId,
+    offset_x: null,
+    offset_y: null,
+    x_path: null,
+    width: null,
+    height: null,
+  };
+
   if (
-    previous.event_type === "keydown" &&
-    trace.event_type === "input" &&
-    previous.x_path === trace.x_path &&
-    previous.event_value === trace.event_value
+    previous.event_type === "mutation" &&
+    previous.element_text === trace.element_text &&
+    previous.message === trace.message
   ) {
-    previous.event_state = trace.event_state;
-    await supabaseActions.insert('Trace', previous);
+    previous = trace;
+    return;
   }
 
-  if (trace.event_type === "mutation") {
-    if (trace.message === lastMutation.message) {
-      return;
-    }
+  if (
+    lastMutation.event_type === "mutation" &&
+    lastMutation.element_text === trace.element_text &&
+    lastMutation.message === trace.message
+  ) {
+    // skip duplicate
+  }
+  else {
     await supabaseActions.insert('Trace', trace);
-    lastMutation = trace;
   }
 
   previous = trace;
-}
+  lastMutation = trace;
+};
+
+const handleApiEvent = async (
+  msg: {type: MessageType, payload: ApiEventTrace},
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: any) => void
+) => {
+  if (!_sender.tab?.id || !_sender.tab?.url) {
+    return;
+  }
+
+  const endpoint = msg.payload.endpoint;
+
+  if (endpoint === "assistwriting") {
+    apiContent = msg.payload.eventState ?? "";
+  }
+  else if (endpoint === "save") {
+    const eventType = msg.payload.eventType === "is" ? "insert" : "delete";
+    let eventValue = msg.payload.eventValue;
+    if (eventType === "delete") {
+      eventValue = undefined;
+    }
+
+    const trace : TraceRecord = {
+      url: msg.payload.url,
+      page_type: msg.payload.pageType,
+      author: msg.payload.author,
+      container_id: null,
+
+      event_type: eventType,
+      message: null,
+      cursor_position: msg.payload.startPosition?? null,
+
+      event_time: msg.payload.eventTime,
+      event_value: eventValue?? null,
+      event_id: extractTurnNumber(msg.payload.eventId) ?? null,
+      event_state: apiContent,
+
+      tag_name: null,
+      element_text: null,
+      offset_x: null,
+      offset_y: null,
+      x_path: null,
+      width: null,
+      height: null,
+    };
+
+    await supabaseActions.insert('Trace', trace);
+  }
+};
 
 chrome.runtime.onMessage.addListener(async(msg, _sender, sendResponse) => {
-  if (msg.type === PopupToExtensionEvent.USER_LOGIN) {
+  if (msg.type === MessageType.LoginEvent) {
     const session = msg.payload;
     const currentSession = await chrome.storage.sync.get("session");
     if (currentSession.session?.access_token !== session.access_token) {
@@ -117,12 +314,21 @@ chrome.runtime.onMessage.addListener(async(msg, _sender, sendResponse) => {
       await supabaseActions.updateSession(session);
     }
   }
-  else if (msg.type === PopupToExtensionEvent.USER_LOGOUT) {
-    console.log("[bg] LOGOUT", msg.payload);
-    chrome.storage.sync.remove("session");
+  // else if (msg.type === PopupToExtensionEvent.USER_LOGOUT) {
+  //   console.log("[bg] LOGOUT", msg.payload);
+  //   chrome.storage.sync.remove("session");
+  // }
+  else if (msg.type === MessageType.UserEvent) {
+    handleUserEvent(msg, _sender, sendResponse);
   }
-  else if (msg.type === "trace") {
-    eventHandler(msg, _sender, sendResponse);
+  else if (msg.type === MessageType.NavigationEvent) {
+    handleNavigationEvent(msg, _sender, sendResponse);
+  }
+  else if (msg.type === MessageType.DOMMutationEvent) {
+    handleDomMutationEvent(msg, _sender, sendResponse);
+  }
+  else if (msg.type === MessageType.ApiEvent) {
+    handleApiEvent(msg, _sender, sendResponse);
   }
   return true; // keep channel open for async
 });

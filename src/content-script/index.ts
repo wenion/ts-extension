@@ -1,29 +1,45 @@
 import { now } from "../shared/util";
-import { addEventListeners } from "./listenerEvent";
-import { captureChatGPTInteractions } from "./platform/chatgpt";
+import { PopupToExtensionEvent } from "../shared/config/eventTypes";
+import { MessageType } from "../shared/types";
+import {
+  installUserEventTracker,
+  installNavigationTracker,
+  installDomChangeTracker
+ } from "./interactionTrackers";
+import {
+  chatgptMutationConfig,
+  handleChatgptMutations
+ } from "./platform/chatgpt";
 
 declare const __MESSENGER_CONFIG__: {
   PAGE_TAG: string;
+  INJ_TAG: string;
   EXT_TAG: string;
   ALLOWED_ORIGINS: string[];
 };
-const { PAGE_TAG, EXT_TAG, ALLOWED_ORIGINS } = __MESSENGER_CONFIG__;
+const { PAGE_TAG, INJ_TAG, EXT_TAG, ALLOWED_ORIGINS } = __MESSENGER_CONFIG__;
 const allowedOrigins = new Set(ALLOWED_ORIGINS);
 
-// Listen to messages from the page
+// Listen to Home Page messages
+// Listen to injected script messages
 window.addEventListener("message", (event) => {
   if (event.source !== window) return;                   // ignore cross-frame
-  if (!allowedOrigins.has(event.origin)) return;         // origin check
+  if (!allowedOrigins.has(event.origin)) return;
 
   const msg = event.data;
-  if (msg?.source !== PAGE_TAG) return;                  // schema/tag check
-
-  // Forward to background
-  chrome.runtime.sendMessage({ type: msg.type, payload: msg.payload });
+  if (msg?.source === PAGE_TAG) {
+    if (msg.type === PopupToExtensionEvent.USER_LOGIN) {
+      // Forward Login Event to Extension
+      chrome.runtime.sendMessage({ type: MessageType.LoginEvent, payload: msg.payload });
+    }
+  }
+  else if (msg?.source === INJ_TAG) {
+    chrome.runtime.sendMessage({ type: MessageType.ApiEvent, payload: msg.payload });
+  }
 });
 
+// Listen to messages from the background
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  console.log("[cs] got message from bg", msg);
   sendResponse({ ok: true, from: "content-script", at: now() });
   return true; // keep channel open for async
 });
@@ -31,18 +47,24 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 // Platform-specific interaction capture
 const host = window.location.host;
 if (host === "chatgpt.com") {
-  captureChatGPTInteractions();
+  const targetNode = document.body;
+  installDomChangeTracker(targetNode, chatgptMutationConfig, handleChatgptMutations);
+}
+else if (host === "docs.google.com") {
+  (function inject() {
+    const script = document.createElement("script");
+    script.src = chrome.runtime.getURL("injected.js");
+    // script.onload = function (this) {
+    //   this.remove();
+    // };
+    script.addEventListener("load", () => {
+      script.remove();
+    });
+    (document.head || document.documentElement).appendChild(script);
+  })();
 }
 
-const navigator = () => {
-  const data = {
-    eventType: "navigation",
-    url: window.location.href,
-  };
-  chrome.runtime.sendMessage({ type: "trace", payload: data });
-}
-
-navigator();
+installNavigationTracker();
 
 // Add listeners to the main document
-addEventListeners(document);
+installUserEventTracker(document);

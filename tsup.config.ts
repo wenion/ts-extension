@@ -34,6 +34,7 @@ export default defineConfig([
     async onSuccess() {
       // Optional rename so you get content-script.js (no .global)
       await rename("build/content-script.global.js", "build/content-script.js").catch(() => {});
+      await cp("injected.js", "build/injected.js").catch(() => {});
       await rename("build/content-script.global.js.map", "build/content-script.js.map").catch(() => {});
     }
   }
