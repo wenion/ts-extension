@@ -1,7 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "http://127.0.0.1:54321";
-const SUPABASE_ANON_KEY = "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
+declare const __SUPABASE_CONFIG__: {
+  SUPABASE_URL: string;
+  SUPABASE_ANON_KEY: string;
+};
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = __SUPABASE_CONFIG__;
 
 
 export const chromeStorageAdapter = {
@@ -21,4 +24,3 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     detectSessionInUrl: false, // no window in service worker
   },
 });
-
