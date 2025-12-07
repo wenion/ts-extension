@@ -24,7 +24,7 @@
       "matches": ["https://docs.google.com/*"]
     }
   ],
-  "host_permissions": ["http://127.0.0.1:54321/*"],
+  "host_permissions": ["https://colam.kmass.cloud.edu.au/*"],
   "icons": {
     "16": "mag16.png",
     "48": "mag48.png",
