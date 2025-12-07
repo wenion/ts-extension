@@ -68,3 +68,5 @@ installNavigationTracker();
 
 // Add listeners to the main document
 installUserEventTracker(document);
+
+console.log("tRACE content-script initialized");

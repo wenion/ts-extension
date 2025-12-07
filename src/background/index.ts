@@ -311,6 +311,7 @@ chrome.runtime.onMessage.addListener(async(msg, _sender, sendResponse) => {
     const currentSession = await chrome.storage.sync.get("session");
     if (currentSession.session?.access_token !== session.access_token) {
       chrome.storage.sync.set({session});
+      chrome.action.setBadgeText({ text: "" });
       await supabaseActions.updateSession(session);
     }
   }
@@ -331,4 +332,22 @@ chrome.runtime.onMessage.addListener(async(msg, _sender, sendResponse) => {
     handleApiEvent(msg, _sender, sendResponse);
   }
   return true; // keep channel open for async
+});
+
+chrome.tabs.onCreated.addListener(async (tab) => {
+  try {
+    const user = await supabaseActions.getUser();
+    if (user) chrome.action.setBadgeText({ text: "" });
+  } catch (error) {
+    chrome.action.setBadgeText({ text: "!"});
+  }
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  try {
+    const user = await supabaseActions.getUser();
+    if (user) chrome.action.setBadgeText({ text: "" });
+  } catch (error) {
+    chrome.action.setBadgeText({ text: "!" });
+  }
 });

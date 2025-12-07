@@ -1,6 +1,14 @@
 import { supabase } from "./supabase-client";
 
 export const supabaseActions = {
+  // Get current user
+  async getUser() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("User not logged in");
+    return session.user;
+  },
+
   // 🔐 Update current auth session
   async updateSession(session: any) {
     const { error, data } = await supabase.auth.setSession({
