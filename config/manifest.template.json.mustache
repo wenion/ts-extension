@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Trace Capture Extension",
+  "description": "Trace Capture Extension",
+  "version": "{{version}}",
+  "externally_connectable": {
+    "matches": {{{externally_connectable_matches}}}
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "{{{default_popup}}}"
+  },
+  "permissions": {{{permissions}}},
+  "optional_permissions": {{{optional_permissions}}},
+  "optional_host_permissions": {{{optional_host_permissions}}},
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches":{{{web_accessible_matches}}}
+    }
+  ],
+  "icons": {
+    "48": "mag48.png",
+    "128": "mag128.png"
+  }
+}
