@@ -1,14 +1,21 @@
-import { now } from "../shared/util";
-import { supabaseActions } from "./supabase/actions";
+import { fetchJson } from "../api/fetch";
+import { now, getPageType } from "../shared/util";
+import {
+  getDefaultIcon,
+  getCapturingIcon,
+  getActiveIcon
+} from "./icons";
 
 import {
   ApiEventTrace,
   DOMMutationEventTrace,
   MessageType,
   TraceRecord,
-  UserEventTrace
+  UserEventTrace,
+  Profile
 } from "../shared/types";
-import { getPageType } from "../shared/util";
+import { isOriginGranted } from "../shared/grantedOrigins";
+import { insertTrace } from "../api/trace";
 
 let previous : TraceRecord = {
   url: "",
@@ -31,11 +38,14 @@ let previous : TraceRecord = {
   x_path: "",
 };
 
+const injectedFor = new Map<number, string>(); // tabId -> lastInjectedUrl
+
 let lastMutation : TraceRecord = previous;
 let apiContent : string = "";
+let token: string | undefined = undefined;
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("[bg] installed at ", now());
+chrome.storage.local.get("token").then(result => {
+  token = result.token as string;
 });
 
 const handleUserEvent = async (
@@ -110,7 +120,7 @@ const handleUserEvent = async (
         trim(msg.payload.textContent);
     }
 
-    // await supabaseActions.insert('Trace', trace);
+    await insertTrace(trace, token);
   }
   else if (eventType === "change") {
   }
@@ -137,7 +147,7 @@ const handleUserEvent = async (
   else if (eventType === "input") {
     if (previous.event_type === "insert" || previous.event_type === "delete") {
       previous.event_state = trace.event_state;
-      await supabaseActions.insert('Trace', previous);
+      await insertTrace(trace, token);
     }
   }
   else if (eventType === "mouseenter") {
@@ -151,26 +161,20 @@ const handleUserEvent = async (
 };
 
 const handleNavigationEvent = async (
-  msg: any,
-  _sender: chrome.runtime.MessageSender,
-  sendResponse: (response?: any) => void
+  url: string
 ) => {
-  if (!_sender.tab?.id || !_sender.tab?.url) {
-    return;
-  }
-
   const trace : TraceRecord = {
-    url: msg.payload.url,
-    page_type: getPageType(_sender.tab.url),
+    url: url,
+    page_type: getPageType(url),
     
     author: null,
     container_id: null,
 
-    event_type: msg.payload.eventType,
+    event_type: "navigation",
     message: null,
     cursor_position: null,
 
-    event_time: msg.payload.eventTime,
+    event_time: new Date().toISOString(),
     event_value: null,
     event_id: null,
     event_state: null,
@@ -189,7 +193,7 @@ const handleNavigationEvent = async (
     return;
   }
 
-  await supabaseActions.insert('Trace', trace);
+  await insertTrace(trace, token);
   previous = trace;
 };
 
@@ -210,7 +214,7 @@ const handleDomMutationEvent = async (
 
   const trace : TraceRecord = {
     url: msg.payload.url,
-    page_type: msg.payload.pageType,
+    page_type: msg.payload.pageType?? null,
     author: msg.payload.author,
     container_id: null,
 
@@ -249,7 +253,7 @@ const handleDomMutationEvent = async (
     // skip duplicate
   }
   else {
-    await supabaseActions.insert('Trace', trace);
+    await insertTrace(trace, token);
   }
 
   previous = trace;
@@ -301,53 +305,188 @@ const handleApiEvent = async (
       height: null,
     };
 
-    await supabaseActions.insert('Trace', trace);
+    await insertTrace(trace, token);
   }
 };
 
-chrome.runtime.onMessage.addListener(async(msg, _sender, sendResponse) => {
-  if (msg.type === MessageType.LoginEvent) {
-    const session = msg.payload;
-    const currentSession = await chrome.storage.sync.get("session");
-    if (currentSession.session?.access_token !== session.access_token) {
-      chrome.storage.sync.set({session});
-      chrome.action.setBadgeText({ text: "" });
-      await supabaseActions.updateSession(session);
-    }
+chrome.runtime.onMessage.addListener(async(msg: any, _sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
+  if (msg.type === "REMOVE_CONTENT_SCRIPT") {
+    sendResponse({ ok: true, from: "content-script", at: now() });
   }
-  // else if (msg.type === PopupToExtensionEvent.USER_LOGOUT) {
-  //   console.log("[bg] LOGOUT", msg.payload);
-  //   chrome.storage.sync.remove("session");
-  // }
+  else if (msg.type === "CONTENT_SCRIPT_LOADED") {
+    const url = new URL(msg.payload.url);
+    const response = { ok: true, from: "content-script", at: now() };
+    if (url.host === "chatgpt.com") {
+      sendResponse({...response, origin: "chatgpt"});
+      return;
+    }
+    if (url.host === "docs.google.com") {
+      sendResponse({...response, origin: "googledocs"});
+      return;
+    }
+    sendResponse(response);
+  }
   else if (msg.type === MessageType.UserEvent) {
     handleUserEvent(msg, _sender, sendResponse);
-  }
-  else if (msg.type === MessageType.NavigationEvent) {
-    handleNavigationEvent(msg, _sender, sendResponse);
   }
   else if (msg.type === MessageType.DOMMutationEvent) {
     handleDomMutationEvent(msg, _sender, sendResponse);
   }
-  else if (msg.type === MessageType.ApiEvent) {
-    handleApiEvent(msg, _sender, sendResponse);
+  else {
+    console.log("Unknown message type in content-script:", msg);
   }
   return true; // keep channel open for async
 });
 
-chrome.tabs.onCreated.addListener(async (tab) => {
-  try {
-    const user = await supabaseActions.getUser();
-    if (user) chrome.action.setBadgeText({ text: "" });
-  } catch (error) {
-    chrome.action.setBadgeText({ text: "!"});
+chrome.tabs.onCreated.addListener(async (tab: chrome.tabs.Tab) => {
+  console.log("[bg] action clicked:", tab.id, tab.url);
+});
+
+chrome.tabs.onReplaced.addListener(async (addedTabId: number, removedTabId: number) => {
+  console.log("[bg] tab replaced:", addedTabId, removedTabId)
+});
+
+const checkPermissionGranted = async (url: URL) => {
+  const originPattern = `${url.origin}/*`;
+  const hasPermission = await chrome.permissions.contains({
+    permissions: ["scripting"],
+    origins: [originPattern]
+  });
+
+  return hasPermission
+};
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (!tab.url) return;
+
+  const url = new URL(tab.url);
+  const hasPermission = await checkPermissionGranted(url);
+
+  if (hasPermission) {
+    try {
+      const res = await chrome.tabs.sendMessage(tab.id!, { type: "PING", tab: tab });
+      if (res.ok) {
+        // already running content-script
+        chrome.action.setIcon({ imageData: getCapturingIcon(), tabId: tab.id });
+        return;
+      }
+    } catch (error) {
+      chrome.action.setIcon({ imageData: getActiveIcon(), tabId: tab.id });
+    }
+  } else {
+    chrome.action.setIcon({ imageData: getDefaultIcon(), tabId: tab.id });
   }
 });
 
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+chrome.webNavigation.onCommitted.addListener(async (details) => {
+  if (
+    details.transitionType !== "auto_subframe" &&
+    details.transitionType !== "manual_subframe"
+  ) {
+    const url = new URL(details.url);
+    const hasPermission = await checkPermissionGranted(url);
+
+    if (hasPermission) {
+      const granted = await isOriginGranted(details.url);
+
+      if (granted) {
+        try {
+          const res = await chrome.tabs.sendMessage(details.tabId, { type: "PING", tab: details });
+          if (res.ok) {
+            // already running content-script
+            chrome.action.setIcon({ imageData: getCapturingIcon(), tabId: details.tabId });
+            return;
+          }
+        } catch (error) {
+          // start content-script
+          await chrome.scripting.executeScript({
+            target: { tabId: details.tabId },
+            files: ['content-script.js'],
+          });
+          chrome.action.setIcon({ imageData: getCapturingIcon(), tabId: details.tabId });
+        }
+        handleNavigationEvent(details.url);
+      }
+      else {
+        chrome.action.setIcon({ imageData: getActiveIcon(), tabId: details.tabId });
+      }
+    } else {
+      chrome.action.setIcon({ imageData: getDefaultIcon(), tabId: details.tabId });
+    }
+  }
+});
+
+chrome.permissions.onAdded.addListener(async (permissions) => {
+  const [tab] = await chrome.tabs.query({ active: true, url: permissions.origins?.[0] });
+
   try {
-    const user = await supabaseActions.getUser();
-    if (user) chrome.action.setBadgeText({ text: "" });
-  } catch (error) {
-    chrome.action.setBadgeText({ text: "!" });
+    const res = await chrome.tabs.sendMessage(tab.id!, { type: "PING", tab: tab });
+    if (res.ok) {
+      await chrome.action.setIcon({imageData: getCapturingIcon(), tabId: tab.id });
+    }
+    else {
+      await chrome.action.setIcon({imageData: getActiveIcon(), tabId: tab.id });
+    }
+  } catch (e) {
+    await checkPermissionGranted(new URL(tab.url!));
+  }
+
+  chrome.action.openPopup();
+});
+
+chrome.permissions.onRemoved.addListener(async (permissions) => {
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+
+  chrome.action.setIcon({ imageData: getDefaultIcon(), tabId: tab.id });
+});
+
+// Clean up when tab closes
+chrome.tabs.onRemoved.addListener((tabId) => {
+  injectedFor.delete(tabId)
+});
+
+chrome.storage.onChanged.addListener(
+  async (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+    if (areaName === 'local' && changes.token) {
+      token = changes.token.newValue as string | undefined;
+    }
+  }
+);
+
+chrome.runtime.onMessageExternal.addListener(
+  async (msg: any, sender: chrome.runtime.MessageSender, sendResponse: (res?: any) => void
+) => {
+  if (msg?.type !== "AUTH_CODE") return;
+
+  const jwt = await fetchJson<{token: string}>("/api/extension/exchange", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { code: msg.code },
+  });
+
+  await chrome.storage.local.set(jwt);
+  token = jwt.token;
+
+  const profile = await fetchJson<Profile>("/api/profile", {
+    token: token,
+  });
+  await chrome.storage.local.set({ profile });
+
+  sendResponse({ ok: true });
+  await chrome.action.openPopup();
+  //sendResponse({ok: false, error: "Failed to fetch profile"});
+
+  return true; // keep channel open for async sendResponse
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+});
+
+chrome.runtime.onInstalled.addListener(async (details: chrome.runtime.InstalledDetails) => {
+  if (details.reason === "install") {
+    const img16  = getDefaultIcon(16);
+    const img32  = getDefaultIcon(32);
+    chrome.action.setIcon({ imageData: { 16: img16, 32: img32 } });
+    // chrome.tabs.create({ url: "welcome.html" });
   }
 });

@@ -7,6 +7,14 @@ export const MessageType = {
   LogoutEvent: "LogoutEvent",
 } as const;
 
+export type Profile ={
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url: string;
+  updated_at: string;
+};
+
 export type MessageType = keyof typeof MessageType;
 
 // User Event Trace type
@@ -64,7 +72,7 @@ export type DOMMutationEventTrace = {
   eventType: string;
   url: string;
   tag: string;
-  pageType: string;
+  pageType?: string;
   author: string;
   message: string;
   eventId: string;

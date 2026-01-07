@@ -1,72 +1,96 @@
 import { now } from "../shared/util";
-import { PopupToExtensionEvent } from "../shared/config/eventTypes";
-import { MessageType } from "../shared/types";
+import { addMutationEventListener, removeMutationEventListener } from "./mutationObserver";
 import {
-  installUserEventTracker,
-  installNavigationTracker,
-  installDomChangeTracker
- } from "./interactionTrackers";
+  addGoogleDocsEventListener,
+  removeGoogleDocsEventListener,
+  googleDocsHandler,
+} from "./googleDocs";
+
 import {
-  chatgptMutationConfig,
-  handleChatgptMutations
- } from "./platform/chatgpt";
+  pointerDownHandler,
+  keyDownHandler,
+  inputHandler,
+  chatgptMutationHandler,
+} from "./onEventHandlers";
 
-declare const __MESSENGER_CONFIG__: {
-  PAGE_TAG: string;
-  INJ_TAG: string;
-  EXT_TAG: string;
-  ALLOWED_ORIGINS: string[];
-};
-const { PAGE_TAG, INJ_TAG, EXT_TAG, ALLOWED_ORIGINS } = __MESSENGER_CONFIG__;
-const allowedOrigins = new Set(ALLOWED_ORIGINS);
+// Global variables
+let observer: MutationObserver | null = null;
 
-// Listen to Home Page messages
-// Listen to injected script messages
-window.addEventListener("message", (event) => {
-  if (event.source !== window) return;                   // ignore cross-frame
-  if (!allowedOrigins.has(event.origin)) return;
-
-  const msg = event.data;
-  if (msg?.source === PAGE_TAG) {
-    if (msg.type === PopupToExtensionEvent.USER_LOGIN) {
-      // Forward Login Event to Extension
-      chrome.runtime.sendMessage({ type: MessageType.LoginEvent, payload: msg.payload });
-    }
+const onMessage = (
+  msg: any,
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (res?: any) => void
+) => {
+  if (msg.type === "CONTENT_SCRIPT_LOADED_ACK") {
+    console.log("tRACE content-script received bg ack message:", msg);
   }
-  else if (msg?.source === INJ_TAG) {
-    chrome.runtime.sendMessage({ type: MessageType.ApiEvent, payload: msg.payload });
+  else if (msg.type === "REMOVE_CONTENT_SCRIPT") {
+    deinit();
+    removeMutationEventListener(observer);
+    removeGoogleDocsEventListener();
+    sendResponse({ ok: true, from: "content-script", at: now() });
+    chrome.runtime.onMessage.removeListener(onMessage);
   }
-});
+  else if (msg.type === "PING") {
+    sendResponse({ ok: true, from: "content-script", at: now() });
+  }
+}
 
 // Listen to messages from the background
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  sendResponse({ ok: true, from: "content-script", at: now() });
-  return true; // keep channel open for async
+chrome.runtime.onMessage.addListener(onMessage);
+
+const init = () => {
+  document.addEventListener("pointerdown", pointerDownHandler);
+  document.addEventListener("keydown", keyDownHandler);
+  document.addEventListener("input", inputHandler);
+};
+
+const deinit = () => {
+  document.removeEventListener("pointerdown", pointerDownHandler);
+  document.removeEventListener("keydown", keyDownHandler);
+  document.removeEventListener("input", inputHandler);
+};
+
+
+chrome.runtime.sendMessage({
+  type: "CONTENT_SCRIPT_LOADED",
+  payload: { url: window.location.href }
+}).then(res => {
+  if (res.ok) {
+    if (res.origin === "chatgpt") {
+      init();
+      const chatgptMutationConfig = {
+        childList: true, // Watch for addition or removal of child nodes
+        // attributes: true, // Watch for changes to attributes
+        subtree: true,   // Watch for changes in descendant nodes
+        characterData: true,
+      };
+      observer = addMutationEventListener(
+        document.body,
+        chatgptMutationConfig,
+        chatgptMutationHandler()
+      )
+    }
+    else if (res.origin === "googledocs") {
+
+      // const iframe = document.querySelector('iframe.docs-texteventtarget-iframe') as HTMLIFrameElement | null;
+      // if (iframe && iframe.contentDocument) {
+      //   const contentEditableElement = iframe.contentDocument.querySelector('[contenteditable="true"]') as HTMLElement | null;
+      //   if (contentEditableElement) {
+      //     contentEditableElement.addEventListener('keydown', keyDownHandler);
+      //   }
+      // }
+      const googleDocsConfig = {
+        methods: ["POST"],
+        url: ["/save", "/assistwriting"]
+      };
+      addGoogleDocsEventListener(
+        googleDocsConfig,
+        googleDocsHandler()
+      );
+    }
+    else {
+      init();
+    }
+  }
 });
-
-// Platform-specific interaction capture
-const host = window.location.host;
-if (host === "chatgpt.com") {
-  const targetNode = document.body;
-  installDomChangeTracker(targetNode, chatgptMutationConfig, handleChatgptMutations);
-}
-else if (host === "docs.google.com") {
-  (function inject() {
-    const script = document.createElement("script");
-    script.src = chrome.runtime.getURL("injected.js");
-    // script.onload = function (this) {
-    //   this.remove();
-    // };
-    script.addEventListener("load", () => {
-      script.remove();
-    });
-    (document.head || document.documentElement).appendChild(script);
-  })();
-}
-
-installNavigationTracker();
-
-// Add listeners to the main document
-installUserEventTracker(document);
-
-console.log("tRACE content-script initialized");
