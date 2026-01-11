@@ -22,7 +22,6 @@ const onMessage = (
   sendResponse: (res?: any) => void
 ) => {
   if (msg.type === "CONTENT_SCRIPT_LOADED_ACK") {
-    console.log("tRACE content-script received bg ack message:", msg);
   }
   else if (msg.type === "REMOVE_CONTENT_SCRIPT") {
     deinit();
