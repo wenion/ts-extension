@@ -3,11 +3,13 @@ import { fetchJson } from "./fetch";
 
 export const insertTrace = async (
   trace: TraceRecord,
-  token?: string
-): Promise<{ id: string }> => {
-  return fetchJson<{ id: string }>("/api/traces", {
+  token?: string,
+  onError?: (response: Response) => void | Promise<void>,
+): Promise<{ id: string } | undefined> => {
+  return fetchJson<{ id: string } | undefined>("/api/traces", {
     method: "POST",
     body: trace,
     token,
+    onError,
   });
 }

@@ -14,8 +14,40 @@ import {
   UserEventTrace,
   Profile
 } from "../shared/types";
-import { isOriginGranted } from "../shared/grantedOrigins";
+import { isOriginGranted, removeGrantedOrigin } from "../shared/grantedOrigins";
 import { insertTrace } from "../api/trace";
+
+const sendTrace = async (trace: TraceRecord, tabId: number, url: string) => {
+  const onError = async (response: Response) => {
+    if (response.status === 401) {
+      // TODO: logout => stop content-script / clear profile / badge update
+      try {
+        await chrome.tabs.sendMessage(tabId, { type: "REMOVE_CONTENT_SCRIPT" });
+        removeGrantedOrigin(url);
+      } catch (e) {
+        console.error("Error sending REMOVE_CONTENT_SCRIPT message", e);
+      }
+      await chrome.storage.local.remove("profile");
+
+      const hasPermission = await checkPermissionGranted(new URL(url));
+      if (hasPermission) {
+        try {
+          const res = await chrome.tabs.sendMessage(tabId, { type: "PING" });
+          if (res.ok) {
+            // already running content-script
+            chrome.action.setIcon({ imageData: getCapturingIcon(), tabId: tabId });
+            return;
+          }
+        } catch (error) {
+          chrome.action.setIcon({ imageData: getActiveIcon(), tabId: tabId });
+        }
+      } else {
+        chrome.action.setIcon({ imageData: getDefaultIcon(), tabId: tabId });
+      }
+    }
+  };
+  await insertTrace(trace, token, onError);
+};
 
 let previous : TraceRecord = {
   url: "",
@@ -53,7 +85,7 @@ const handleUserEvent = async (
   _sender: chrome.runtime.MessageSender,
   sendResponse: (response?: any) => void
 ) => {
-  if (!_sender.tab?.id || !_sender.tab?.url) {
+  if (!_sender.tab || _sender.tab.id == null || !_sender.tab.url) {
     return;
   }
 
@@ -120,7 +152,7 @@ const handleUserEvent = async (
         trim(msg.payload.textContent);
     }
 
-    await insertTrace(trace, token);
+    await sendTrace(trace, _sender.tab.id, _sender.tab.url);
   }
   else if (eventType === "change") {
   }
@@ -147,7 +179,7 @@ const handleUserEvent = async (
   else if (eventType === "input") {
     if (previous.event_type === "insert" || previous.event_type === "delete") {
       previous.event_state = trace.event_state;
-      await insertTrace(trace, token);
+      await sendTrace(trace, _sender.tab.id, _sender.tab.url);
     }
   }
   else if (eventType === "mouseenter") {
@@ -161,6 +193,7 @@ const handleUserEvent = async (
 };
 
 const handleNavigationEvent = async (
+  tabId: number,
   url: string
 ) => {
   const trace : TraceRecord = {
@@ -193,7 +226,7 @@ const handleNavigationEvent = async (
     return;
   }
 
-  await insertTrace(trace, token);
+  await sendTrace(trace, tabId, url);
   previous = trace;
 };
 
@@ -253,7 +286,7 @@ const handleDomMutationEvent = async (
     // skip duplicate
   }
   else {
-    await insertTrace(trace, token);
+    await sendTrace(trace, _sender.tab.id, _sender.tab.url);
   }
 
   previous = trace;
@@ -305,7 +338,7 @@ const handleApiEvent = async (
       height: null,
     };
 
-    await insertTrace(trace, token);
+    await sendTrace(trace, _sender.tab.id, _sender.tab.url);
   }
 };
 
@@ -347,34 +380,35 @@ chrome.tabs.onReplaced.addListener(async (addedTabId: number, removedTabId: numb
 });
 
 const checkPermissionGranted = async (url: URL) => {
+  if (!["http:", "https:"].includes(url.protocol)) {
+    return false;
+  }
+
   const originPattern = `${url.origin}/*`;
-  const hasPermission = await chrome.permissions.contains({
+
+  return chrome.permissions.contains({
     permissions: ["scripting"],
     origins: [originPattern]
   });
-
-  return hasPermission
 };
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (!tab.url) return;
 
-  const url = new URL(tab.url);
-  const hasPermission = await checkPermissionGranted(url);
-
+  const hasPermission = await checkPermissionGranted(new URL(tab.url));
   if (hasPermission) {
     try {
-      const res = await chrome.tabs.sendMessage(tab.id!, { type: "PING", tab: tab });
+      const res = await chrome.tabs.sendMessage(tabId, { type: "PING" });
       if (res.ok) {
         // already running content-script
-        chrome.action.setIcon({ imageData: getCapturingIcon(), tabId: tab.id });
+        chrome.action.setIcon({ imageData: getCapturingIcon(), tabId: tabId });
         return;
       }
     } catch (error) {
-      chrome.action.setIcon({ imageData: getActiveIcon(), tabId: tab.id });
+      chrome.action.setIcon({ imageData: getActiveIcon(), tabId: tabId });
     }
   } else {
-    chrome.action.setIcon({ imageData: getDefaultIcon(), tabId: tab.id });
+    chrome.action.setIcon({ imageData: getDefaultIcon(), tabId: tabId });
   }
 });
 
@@ -391,7 +425,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 
       if (granted) {
         try {
-          const res = await chrome.tabs.sendMessage(details.tabId, { type: "PING", tab: details });
+          const res = await chrome.tabs.sendMessage(details.tabId, { type: "PING" });
           if (res.ok) {
             // already running content-script
             chrome.action.setIcon({ imageData: getCapturingIcon(), tabId: details.tabId });
@@ -405,7 +439,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
           });
           chrome.action.setIcon({ imageData: getCapturingIcon(), tabId: details.tabId });
         }
-        handleNavigationEvent(details.url);
+        handleNavigationEvent(details.tabId, details.url);
       }
       else {
         chrome.action.setIcon({ imageData: getActiveIcon(), tabId: details.tabId });
@@ -417,10 +451,11 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 });
 
 chrome.permissions.onAdded.addListener(async (permissions) => {
+  // TODO: tab might be undefined
   const [tab] = await chrome.tabs.query({ active: true, url: permissions.origins?.[0] });
 
   try {
-    const res = await chrome.tabs.sendMessage(tab.id!, { type: "PING", tab: tab });
+    const res = await chrome.tabs.sendMessage(tab.id!, { type: "PING" });
     if (res.ok) {
       await chrome.action.setIcon({imageData: getCapturingIcon(), tabId: tab.id });
     }
@@ -428,6 +463,7 @@ chrome.permissions.onAdded.addListener(async (permissions) => {
       await chrome.action.setIcon({imageData: getActiveIcon(), tabId: tab.id });
     }
   } catch (e) {
+    // TODO
     await checkPermissionGranted(new URL(tab.url!));
   }
 
@@ -456,25 +492,45 @@ chrome.storage.onChanged.addListener(
 chrome.runtime.onMessageExternal.addListener(
   async (msg: any, sender: chrome.runtime.MessageSender, sendResponse: (res?: any) => void
 ) => {
-  if (msg?.type !== "AUTH_CODE") return;
+  if (msg?.type !== "AUTH_CODE") {
+    sendResponse({ ok: false, error: "Invalid message type" });
+    return;
+  }
 
-  const jwt = await fetchJson<{token: string}>("/api/extension/exchange", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: { code: msg.code },
-  });
+  const res = await fetchJson<{token: string} | undefined>(
+    "/api/extension/exchange",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: { code: msg.code },
+      onError: async (response) => {
+        const { error } = await response.json().catch(() => ({}));
+        sendResponse({ ok: false, error: error });
+      }
+    },
+  );
 
-  await chrome.storage.local.set(jwt);
-  token = jwt.token;
+  if (!res) {
+    sendResponse({ ok: false, error: "Missing response from token exchange" });
+    return;
+  }
 
-  const profile = await fetchJson<Profile>("/api/profile", {
-    token: token,
-  });
+  await chrome.storage.local.set({ token: res.token });
+  token = res.token;
+
+  const profile = await fetchJson<Profile | undefined>(
+    "/api/profile",
+    { token: token, }
+  );
+
+  if (!profile) {
+    sendResponse({ ok: false, error: "Missing response from User's profile" });
+    return;
+  }
   await chrome.storage.local.set({ profile });
 
   sendResponse({ ok: true });
   await chrome.action.openPopup();
-  //sendResponse({ok: false, error: "Failed to fetch profile"});
 
   return true; // keep channel open for async sendResponse
 });

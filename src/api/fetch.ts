@@ -10,12 +10,15 @@ interface AuthedFetchOptions extends Omit<RequestInit, "body"> {
   body?: unknown; // JSON body by default
   rawBody?: BodyInit; // if you want full control
   baseUrl?: string; // optional override
+
+  /** called for any !res.ok (including 401 if you want) */
+  onError?: (response: Response) => void | Promise<void>;
 }
 
 export async function fetchJson<T = any>(
   path: string,
   options: Omit<AuthedFetchOptions, "token"> & { token?: string } = {}
-): Promise<T> {
+): Promise<T | undefined> {
   const {
     method = "GET",
     query,
@@ -24,13 +27,16 @@ export async function fetchJson<T = any>(
     baseUrl = process.env.NEXT_PUBLIC_SITE_URL!,
     headers,
     token,
+    onError,
     ...rest
   } = options;
 
   const url = new URL(path, baseUrl);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
+      if (value !== undefined && value !== null) {
+        url.searchParams.set(key, String(value));
+      }
     }
   }
 
@@ -46,14 +52,21 @@ export async function fetchJson<T = any>(
     body: rawBody ?? (body ? JSON.stringify(body) : undefined),
     ...rest,
   });
-  // caller decides how to handle 401 if it wants
+
   if (!res.ok) {
+    if (onError) {
+      await onError(res);
+      return undefined;
+    }
+
     const text = await res.text().catch(() => "");
-    throw new Error(`Request failed (${res.status}): ${text}`);
+    throw new Error(
+      `Request failed (${res.status}): ${text || res.statusText}`
+    );
   }
 
   // handle empty responses
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return undefined;
 
   return (await res.json()) as T;
 }
