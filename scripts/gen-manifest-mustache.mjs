@@ -4,6 +4,8 @@ import path from "node:path";
 import Mustache from "mustache";
 import "dotenv/config";
 
+// .env > .env.local
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -15,6 +17,10 @@ async function main() {
     .filter(Boolean);
   const default_popup = process.env.DEFAULT_POPUP ?? "dist/index.html";
   const web_accessible_matches = (process.env.WEB_ACCESSIBLE_MATCHES ?? "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+  const host_permissions = (process.env.HOST_PERMISSIONS ?? "")
     .split(",")
     .map(s => s.trim())
     .filter(Boolean);
@@ -39,6 +45,7 @@ async function main() {
     default_popup: default_popup,
     externally_connectable_matches: JSON.stringify(externallyConnectableMatches),
     web_accessible_matches: JSON.stringify(web_accessible_matches),
+    host_permissions: JSON.stringify(host_permissions),
     permissions: JSON.stringify(permissions),
     optional_permissions: JSON.stringify(optional_permissions),
     optional_host_permissions: JSON.stringify(optional_host_permissions),
