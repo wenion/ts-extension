@@ -70,8 +70,6 @@ let previous : TraceRecord = {
   x_path: "",
 };
 
-const injectedFor = new Map<number, string>(); // tabId -> lastInjectedUrl
-
 let lastMutation : TraceRecord = previous;
 let apiContent : string = "";
 let token: string | undefined = undefined;
@@ -450,36 +448,15 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
   }
 });
 
-chrome.permissions.onAdded.addListener(async (permissions) => {
-  // TODO: tab might be undefined
-  const [tab] = await chrome.tabs.query({ active: true, url: permissions.origins?.[0] });
+// chrome.permissions.onAdded.addListener(async (permissions) => {
+//   // chrome.storage.session.set({ permDirty: true });
+//   // Re-evaluate only when a tab becomes meaningful - chrome.tabs.onActivated
+// });
 
-  try {
-    const res = await chrome.tabs.sendMessage(tab.id!, { type: "PING" });
-    if (res.ok) {
-      await chrome.action.setIcon({imageData: getCapturingIcon(), tabId: tab.id });
-    }
-    else {
-      await chrome.action.setIcon({imageData: getActiveIcon(), tabId: tab.id });
-    }
-  } catch (e) {
-    // TODO
-    await checkPermissionGranted(new URL(tab.url!));
-  }
-
-  chrome.action.openPopup();
-});
-
-chrome.permissions.onRemoved.addListener(async (permissions) => {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-
-  chrome.action.setIcon({ imageData: getDefaultIcon(), tabId: tab.id });
-});
-
-// Clean up when tab closes
-chrome.tabs.onRemoved.addListener((tabId) => {
-  injectedFor.delete(tabId)
-});
+// chrome.permissions.onRemoved.addListener(async (permissions) => {
+//   // chrome.storage.session.set({ permDirty: true });
+//   // Re-evaluate only when a tab becomes meaningful - chrome.tabs.onActivated
+// });
 
 chrome.storage.onChanged.addListener(
   async (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
@@ -490,47 +467,59 @@ chrome.storage.onChanged.addListener(
 );
 
 chrome.runtime.onMessageExternal.addListener(
-  async (msg: any, sender: chrome.runtime.MessageSender, sendResponse: (res?: any) => void
+  (msg: any, sender: chrome.runtime.MessageSender, sendResponse: (res?: any) => void
 ) => {
-  if (msg?.type !== "AUTH_CODE") {
-    sendResponse({ ok: false, error: "Invalid message type" });
-    return;
-  }
-
-  const res = await fetchJson<{token: string} | undefined>(
-    "/api/extension/exchange",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: { code: msg.code },
-      onError: async (response) => {
-        const { error } = await response.json().catch(() => ({}));
-        sendResponse({ ok: false, error: error });
+  console.log("Received external message:", sender, sender.tab);
+  (async () => {
+    try {
+      if (!sender.origin?.startsWith(process.env.NEXT_PUBLIC_SITE_URL!)) {
+        sendResponse({ ok: false, error: "Unauthorized sender" });
+        return;
       }
-    },
-  );
 
-  if (!res) {
-    sendResponse({ ok: false, error: "Missing response from token exchange" });
-    return;
-  }
+      if (msg?.type !== "AUTH_CODE") {
+        sendResponse({ ok: false, error: "Invalid message type" });
+        return;
+      }
 
-  await chrome.storage.local.set({ token: res.token });
-  token = res.token;
+      const res = await fetchJson<{token: string} | undefined>(
+        "/api/extension/exchange",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: { code: msg.code },
+        },
+      );
 
-  const profile = await fetchJson<Profile | undefined>(
-    "/api/profile",
-    { token: token, }
-  );
+      if (!res?.token) {
+        sendResponse({ ok: false, error: "Token exchange failed" });
+        return;
+      }
 
-  if (!profile) {
-    sendResponse({ ok: false, error: "Missing response from User's profile" });
-    return;
-  }
-  await chrome.storage.local.set({ profile });
+      await chrome.storage.local.set({ token: res.token });
+      token = res.token;
 
-  sendResponse({ ok: true });
-  await chrome.action.openPopup();
+      const profile = await fetchJson<Profile | undefined>(
+        "/api/profile",
+        { token: token, }
+      );
+
+      if (!profile) {
+        sendResponse({ ok: false, error: "Missing response from User's profile" });
+        return;
+      }
+
+      await chrome.storage.local.set({ profile });
+
+      sendResponse({ ok: true });
+    } catch (err) {
+        console.error("onMessageExternal failed:", err);
+        sendResponse({
+          ok: false,
+          error: err instanceof Error ? err.message : "Unknown error",
+        });
+      }
+  })();
 
   return true; // keep channel open for async sendResponse
 });
