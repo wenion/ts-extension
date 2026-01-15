@@ -401,14 +401,16 @@ export const onKeyDown = (
   const data = {} as UserEventTrace;
   data.eventType = "keydown";
 
-  if (
-    !target ||
-    !(
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      (target instanceof HTMLElement && target.isContentEditable)
-    )
-  ) return;
+  if (!target) return;
+
+  const isNativeInput =
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement;
+
+  const isInContentEditable =
+    (target as HTMLElement).isContentEditable;
+
+  if (!isNativeInput && !isInContentEditable) return;
 
   data.tag = (target as Element).tagName?.toLowerCase() || "";
   data.name = (target as any).name || "";
@@ -432,7 +434,6 @@ export const onKeyDown = (
   data.eventValue = data.key;
   data.eventState = data.textContent;
 
-  data.pageType = "AI";
   data.author = "human";
 
   if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
