@@ -10,11 +10,16 @@ import {
   pointerDownHandler,
   keyDownHandler,
   inputHandler,
+  cutHandler,
+  copyHandler,
+  pasteHandler,
   chatgptMutationHandler,
 } from "./onEventHandlers";
+import { Source } from "../shared/types";
 
 // Global variables
 let observer: MutationObserver | null = null;
+let contentEditableElement: HTMLElement | null = null;
 
 const onMessage = (
   msg: any,
@@ -27,6 +32,13 @@ const onMessage = (
     deinit();
     removeMutationEventListener(observer);
     removeGoogleDocsEventListener();
+    if (contentEditableElement) {
+      contentEditableElement.removeEventListener('keydown', keyDownHandler);
+      contentEditableElement.removeEventListener('cut', cutHandler);
+      contentEditableElement.removeEventListener('copy', copyHandler);
+      contentEditableElement.removeEventListener('paste', pasteHandler);
+      contentEditableElement = null;
+    }
     sendResponse({ ok: true, from: "content-script", at: now() });
     chrome.runtime.onMessage.removeListener(onMessage);
   }
@@ -42,12 +54,18 @@ const init = () => {
   document.addEventListener("pointerdown", pointerDownHandler);
   document.addEventListener("keydown", keyDownHandler);
   document.addEventListener("input", inputHandler);
+  document.addEventListener("copy", copyHandler);
+  document.addEventListener("cut", cutHandler);
+  document.addEventListener("paste", pasteHandler);
 };
 
 const deinit = () => {
   document.removeEventListener("pointerdown", pointerDownHandler);
   document.removeEventListener("keydown", keyDownHandler);
   document.removeEventListener("input", inputHandler);
+  document.removeEventListener("copy", copyHandler);
+  document.removeEventListener("cut", cutHandler);
+  document.removeEventListener("paste", pasteHandler);
 };
 
 
@@ -56,7 +74,7 @@ chrome.runtime.sendMessage({
   payload: { url: window.location.href }
 }).then(res => {
   if (res.ok) {
-    if (res.origin === "chatgpt") {
+    if (res.origin === Source.CHATGPT) {
       init();
       const chatgptMutationConfig = {
         childList: true, // Watch for addition or removal of child nodes
@@ -70,15 +88,18 @@ chrome.runtime.sendMessage({
         chatgptMutationHandler()
       )
     }
-    else if (res.origin === "googledocs") {
-
-      // const iframe = document.querySelector('iframe.docs-texteventtarget-iframe') as HTMLIFrameElement | null;
-      // if (iframe && iframe.contentDocument) {
-      //   const contentEditableElement = iframe.contentDocument.querySelector('[contenteditable="true"]') as HTMLElement | null;
-      //   if (contentEditableElement) {
-      //     contentEditableElement.addEventListener('keydown', keyDownHandler);
-      //   }
-      // }
+    else if (res.origin === Source.GOOGLE_DOCS) {
+      const iframe = document.querySelector('iframe.docs-texteventtarget-iframe') as HTMLIFrameElement | null;
+      if (iframe && iframe.contentDocument) {
+        contentEditableElement = iframe.contentDocument.querySelector('[contenteditable="true"]');
+        if (contentEditableElement) {
+          console.log("Google Docs contentEditable element found.");
+          contentEditableElement.addEventListener('keydown', keyDownHandler);
+          contentEditableElement.addEventListener('copy', copyHandler);
+          contentEditableElement.addEventListener('cut', cutHandler);
+          contentEditableElement.addEventListener('paste', pasteHandler);
+        }
+      }
       const googleDocsConfig = {
         methods: ["POST"],
         url: ["/save", "/assistwriting"]

@@ -3,27 +3,20 @@ import {
   detachXHR,
   injectPageScript
 } from "./xhrHookController";
-
 import {
   XHRHookConfig,
 } from "./xhrHookMessageProtocol";
 
-type GoogleDocsEventTraceBase = {
-  endpoint: string;
-  url: string;
-  type: string;
-  eventValue: string;
-  eventState?: string;
-  eventId: string;
-  eventTime: string;
-  startPosition?: number;
-  endPosition?: number;
-}
+import type { ApiEventTrace } from "../shared/types";
+import { MessageType, Source } from "../shared/types";
 
 let googleDocsMessageHandler: ((event: MessageEvent) => void) | null = null;
 
-function postMessageToContentScript(data: GoogleDocsEventTraceBase) {
-  chrome.runtime.sendMessage(data);
+function postMessageToContentScript(data: ApiEventTrace) {
+  chrome.runtime.sendMessage({
+    type: MessageType.ApiEvent,
+    payload: data
+  });
 }
 
 export const googleDocsHandler = (
@@ -49,25 +42,32 @@ export const googleDocsHandler = (
         if (type === "is") {
           const ibi = content.ibi;
           const text = content.s;
-          const data: GoogleDocsEventTraceBase = {
-            endpoint: "save",
+          const data: ApiEventTrace = {
+            method: "POST",
+            eventType: "keystroke",
+            subType: "insert",
             url: window.location.href,
-            type: type,
-            eventValue: text,
+            pageType: "editor",
+            author: "human",
+            source: Source.GOOGLE_DOCS,
             eventId: meta.requestId,
-            eventTime: new Date().toISOString(),
+            eventValue: text,
             startPosition: ibi,
+            eventTime: new Date().toISOString(),
           }
           postMessageToContentScript(data);
         }
         else if (type === "ds") {
           const si = content.si;
           const ei = content.ei;
-          const data: GoogleDocsEventTraceBase = {
-            endpoint: "save",
+          const data: ApiEventTrace = {
+            method: "POST",
+            eventType: "keystroke",
+            subType: "delete",
             url: window.location.href,
-            type: type,
-            eventValue: "",
+            pageType: "editor",
+            author: "human",
+            source: Source.GOOGLE_DOCS,
             eventId: meta.requestId,
             eventTime: new Date().toISOString(),
             startPosition: si,
@@ -81,10 +81,14 @@ export const googleDocsHandler = (
             if (item.ty === "is") {
               const ibi = item.ibi;
               const text = item.s;
-              const data: GoogleDocsEventTraceBase = {
-                endpoint: "save",
+              const data: ApiEventTrace = {
+                method: "POST",
+                eventType: "keystroke",
+                subType: "insert",
                 url: window.location.href,
-                type: type,
+                pageType: "editor",
+                author: "human",
+                source: Source.GOOGLE_DOCS,
                 eventValue: text?? "",
                 eventId: meta.requestId,
                 eventTime: new Date().toISOString(),
@@ -95,10 +99,14 @@ export const googleDocsHandler = (
             else if (item.ty === "ds") {
               const si = item.si;
               const ei = item.ei;
-              const data: GoogleDocsEventTraceBase = {
-                endpoint: "save",
+              const data: ApiEventTrace = {
+                method: "POST",
+                eventType: "keystroke",
+                subType: "delete",
                 url: window.location.href,
-                type: type,
+                pageType: "editor",
+                author: "human",
+                source: Source.GOOGLE_DOCS,
                 eventValue: "",
                 eventId: meta.requestId,
                 eventTime: new Date().toISOString(),
@@ -122,10 +130,14 @@ export const googleDocsHandler = (
         const body = JSON.parse(msg.body);
         const suggestionText = body[0][0];
 
-        const data: GoogleDocsEventTraceBase = {
-          endpoint: "assistwriting",
+        const data: ApiEventTrace = {
+          method: "POST",
+          eventType: "input",
+          subType: "change",
+          source: Source.GOOGLE_DOCS,
           url: window.location.href,
-          type: "assistwriting",
+          pageType: "editor",
+          author: "human",
           eventState: suggestionText,
           eventValue: body.prompt ?? "",
           eventId: meta.requestId,

@@ -522,28 +522,100 @@ export const onWheel = (
   func && func(data);
 };
 
+export const onCut = (
+  event: ClipboardEvent,
+  func?: (trace: UserEventTrace) => void
+): void => {
+  let text = "";
+
+  const target = event.target as HTMLElement | null;
+
+  // Case 1: input / textarea
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement
+  ) {
+    const start = target.selectionStart ?? 0;
+    const end = target.selectionEnd ?? 0;
+    text = target.value.slice(start, end);
+  }
+  // Case 2: contenteditable or normal DOM selection
+  else {
+    text = document.getSelection()?.toString() ?? "";
+  }
+
+  const data = {} as UserEventTrace;
+  data.eventType = "cut";
+  data.textContent = text;
+  data.eventState = text;
+
+  if (target) {
+    data.tag = target.tagName.toLowerCase();
+
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      data.innerText = target.value;
+      data.name = target.name ?? "";
+      data.placeholder = target.placeholder ?? "";
+    } else {
+      data.innerText = target.innerText ?? "";
+      data.name = "";
+      data.placeholder = "";
+    }
+  }
+
+  func?.(data);
+};
+
 export const onCopy = (
   event: ClipboardEvent,
   func?: (trace: UserEventTrace) => void
 ) : void => {
-  const selection = document.getSelection();
-  if (!selection) return;
+  const clipboardText = event.clipboardData?.getData("text/plain") ?? "";
+
   const data = {} as UserEventTrace;
   data.eventType = "copy";
-  data.subType = "";
-  data.tag = "";
-  data.name = "";
-  data.innerText = "";
-  data.textContent = selection.toString();
-  data.clientX = 0;
-  data.clientY = 0;
-  data.width = window.innerWidth;
-  data.height = window.innerHeight;
-  data.xpath = "";
-  data.eventState = selection.toString();
-  data.message = selection.toString();
+  data.textContent = clipboardText;
+  data.eventState = clipboardText;
 
-  func && func(data);
+  const target = event.target as HTMLElement | null;
+  if (target) {
+    data.tag = target.tagName.toLowerCase();
+    data.innerText = target.innerText ?? "";
+    data.name = (target as HTMLInputElement).name ?? "";
+    data.placeholder = (target as HTMLInputElement).placeholder ?? "";
+  }
+
+  func?.(data);
+};
+
+
+export const onPaste = (
+  event: ClipboardEvent,
+  func?: (trace: UserEventTrace) => void
+) : void => {
+  const clipboardText =
+    event.clipboardData?.getData("text/plain") ?? "";
+
+  const data = {} as UserEventTrace;
+  data.eventType = "paste";
+  data.textContent = clipboardText;
+  data.eventState = clipboardText;
+
+  const target = event.target as HTMLElement | null;
+  if (target) {
+    data.tag = target.tagName.toLowerCase();
+    data.innerText = target.innerText ?? "";
+    data.name = (target as HTMLInputElement).name ?? "";
+    data.placeholder = (target as HTMLInputElement).placeholder ?? "";
+
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      data.cursorPosition = target.selectionStart ?? undefined;
+      data.originValue = target.value;
+      data.valueType = typeof target.value;
+    }
+  }
+
+  func?.(data);
 };
 
 export const mutationEventSender = (trace: DOMMutationEventTrace) => {

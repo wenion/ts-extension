@@ -12,10 +12,37 @@ import {
   MessageType,
   TraceRecord,
   UserEventTrace,
-  Profile
+  Profile,
+  Source,
 } from "../shared/types";
 import { isOriginGranted, removeGrantedOrigin } from "../shared/grantedOrigins";
 import { insertTrace } from "../api/trace";
+
+function createEmptyTraceRecord(): TraceRecord {
+  return {
+    url: "",
+    page_type: null,
+    author: null,
+    container_id: 0,
+    event_type: null,
+    message: null,
+    cursor_position: 0,
+    end_position: null,
+    event_time: null,
+    event_value: null,
+    event_id: null,
+    event_state: null,
+    tag_name: null,
+    element_text: null,
+    offset_x: null,
+    offset_y: null,
+    width: null,
+    height: null,
+    x_path: null,
+  };
+}
+
+let previous : TraceRecord = createEmptyTraceRecord();
 
 const sendTrace = async (trace: TraceRecord, tabId: number, url: string) => {
   const onError = async (response: Response) => {
@@ -46,32 +73,97 @@ const sendTrace = async (trace: TraceRecord, tabId: number, url: string) => {
       }
     }
   };
-  await insertTrace(trace, token, onError);
-};
 
-let previous : TraceRecord = {
-  url: "",
-  page_type: "",
-  author: "",
-  container_id: 0,
-  event_type: "",
-  message: "",
-  cursor_position: 0,
-  event_time: "",
-  event_value: "",
-  event_id: "",
-  event_state: "",
-  tag_name: "",
-  element_text: "",
-  offset_x: 0,
-  offset_y: 0,
-  width: 0,
-  height: 0,
-  x_path: "",
+  if (trace.event_type === "keydown") {
+    if (previous.event_type === "keydown") {
+      await insertTrace(previous, token, onError);
+    }
+    else if (previous.event_type === "keydown-input") {
+      previous.event_type = "keydown";
+      await insertTrace(previous, token, onError);
+    }
+    else if (previous.event_type === "paste" || previous.event_type === "cut") {
+      await insertTrace(previous, token, onError);
+    }
+  }
+  else if (trace.event_type === "input") {
+    if (previous.event_type === "keydown") {
+      trace.event_type = "keydown-input";
+      trace.event_value = previous.event_value;
+    }
+  }
+  else if (trace.event_type === "keystroke") {
+    if (previous.event_type === "keydown-input") {
+      if (previous.event_value === trace.event_value) {
+        previous.cursor_position = trace.cursor_position;
+      }
+
+      previous.event_type = "keydown";
+      await insertTrace(previous, token, onError);
+      trace = createEmptyTraceRecord();
+    }
+    else if (previous.event_type === "keydown") {
+      if (trace.event_value === null) {
+        if (previous.event_value === "Backspace") {
+          previous.cursor_position = trace.cursor_position;
+          previous.end_position = trace.end_position;
+        }
+      }
+      else if (trace.event_value === "\n") {
+        if (previous.event_value === "Enter") {
+          previous.cursor_position = trace.cursor_position;
+        }
+      }
+
+      previous.event_type = "keydown";
+      await insertTrace(previous, token, onError);
+      trace = createEmptyTraceRecord();
+    }
+    else if (previous.event_type === "paste") {
+      await insertTrace(previous, token, onError);
+      trace = createEmptyTraceRecord();
+    }
+    else if (previous.event_type === "cut") {
+      await insertTrace(previous, token, onError);
+      trace = createEmptyTraceRecord();
+    }
+  }
+  else if (trace.event_type === "paste") {
+    if (previous.event_type === "keydown-input") {
+      previous.event_type = "keydown";
+      await insertTrace(previous, token, onError);
+    }
+    else if (previous.event_type === "cut") {
+      await insertTrace(previous, token, onError);
+    }
+  }
+  else if (trace.event_type === "cut") {
+    if (previous.event_type === "keydown-input") {
+      previous.event_type = "keydown";
+      await insertTrace(previous, token, onError);
+    }
+    else if (previous.event_type === "paste") {
+      await insertTrace(previous, token, onError);
+    }
+  }
+  else {
+    if (previous.event_type === "keydown-input") {
+      previous.event_type = "keydown";
+      await insertTrace(previous, token, onError);
+    }
+    else if (previous.event_type === "paste" || previous.event_type === "cut") {
+      await insertTrace(previous, token, onError);
+    }
+    else if (previous.event_type === "keydown") {
+      await insertTrace(previous, token, onError);
+    }
+    await insertTrace(trace, token, onError);
+  }
+
+  previous = trace;
 };
 
 let lastMutation : TraceRecord = previous;
-let apiContent : string = "";
 let token: string | undefined = undefined;
 
 chrome.storage.local.get("token").then(result => {
@@ -96,6 +188,7 @@ const handleUserEvent = async (
     event_type: msg.payload.eventType,
     message: msg.payload.message?? null,
     cursor_position: msg.payload.cursorPosition ?? null,
+    end_position: null,
 
     event_time: new Date().toISOString(),
     event_value: msg.payload.eventValue?? null,
@@ -149,8 +242,6 @@ const handleUserEvent = async (
         trim(msg.payload.innerText) ||
         trim(msg.payload.textContent);
     }
-
-    await sendTrace(trace, _sender.tab.id, _sender.tab.url);
   }
   else if (eventType === "change") {
   }
@@ -167,18 +258,15 @@ const handleUserEvent = async (
   else if (eventType === "paste") {
   }
   else if (eventType === "keydown") {
-    if (trace.event_value === "Backspace" || trace.event_value === "Delete") {
-      trace.event_type = "delete";
+    const payload = msg.payload;
+    if (payload.ctrlKey || payload.altKey || payload.metaKey) {
+      return;
     }
-    else {
-      trace.event_type = "insert";
+    if (payload.shiftKey && payload.eventValue === "Shift") {
+      return;
     }
   }
   else if (eventType === "input") {
-    if (previous.event_type === "insert" || previous.event_type === "delete") {
-      previous.event_state = trace.event_state;
-      await sendTrace(trace, _sender.tab.id, _sender.tab.url);
-    }
   }
   else if (eventType === "mouseenter") {
   }
@@ -187,7 +275,7 @@ const handleUserEvent = async (
   else if (eventType === "blur") {
   }
 
-  previous = trace;
+  await sendTrace(trace, _sender.tab.id, _sender.tab.url);
 };
 
 const handleNavigationEvent = async (
@@ -204,6 +292,7 @@ const handleNavigationEvent = async (
     event_type: "navigation",
     message: null,
     cursor_position: null,
+    end_position: null,
 
     event_time: new Date().toISOString(),
     event_value: null,
@@ -252,6 +341,7 @@ const handleDomMutationEvent = async (
     event_type: msg.payload.eventType,
     message: msg.payload.message,
     cursor_position: null,
+    end_position: null,
 
     event_time: msg.payload.eventTime,
     event_value: null,
@@ -299,33 +389,24 @@ const handleApiEvent = async (
   if (!_sender.tab?.id || !_sender.tab?.url) {
     return;
   }
+  const payload = msg.payload;
 
-  const endpoint = msg.payload.endpoint;
-
-  if (endpoint === "assistwriting") {
-    apiContent = msg.payload.eventState ?? "";
-  }
-  else if (endpoint === "save") {
-    const eventType = msg.payload.eventType === "is" ? "insert" : "delete";
-    let eventValue = msg.payload.eventValue;
-    if (eventType === "delete") {
-      eventValue = undefined;
-    }
-
+  if (payload.source === Source.GOOGLE_DOCS) {
     const trace : TraceRecord = {
-      url: msg.payload.url,
-      page_type: msg.payload.pageType,
-      author: msg.payload.author,
+      url: _sender.tab.url,
+      page_type: getPageType(_sender.tab.url),
+      author: payload.author ?? "other",
       container_id: null,
 
-      event_type: eventType,
+      event_type: payload.eventType,
       message: null,
-      cursor_position: msg.payload.startPosition?? null,
+      cursor_position: payload.startPosition ?? null,
+      end_position: payload.endPosition ?? null,
 
-      event_time: msg.payload.eventTime,
-      event_value: eventValue?? null,
-      event_id: extractTurnNumber(msg.payload.eventId) ?? null,
-      event_state: apiContent,
+      event_time: new Date().toISOString(),
+      event_value: payload.eventValue?? null,
+      event_id: payload.eventId?? null,
+      event_state: payload.eventState?? null,
 
       tag_name: null,
       element_text: null,
@@ -334,8 +415,7 @@ const handleApiEvent = async (
       x_path: null,
       width: null,
       height: null,
-    };
-
+    }
     await sendTrace(trace, _sender.tab.id, _sender.tab.url);
   }
 };
@@ -348,11 +428,11 @@ chrome.runtime.onMessage.addListener(async(msg: any, _sender: chrome.runtime.Mes
     const url = new URL(msg.payload.url);
     const response = { ok: true, from: "content-script", at: now() };
     if (url.host === "chatgpt.com") {
-      sendResponse({...response, origin: "chatgpt"});
+      sendResponse({...response, origin: Source.CHATGPT});
       return;
     }
     if (url.host === "docs.google.com") {
-      sendResponse({...response, origin: "googledocs"});
+      sendResponse({...response, origin: Source.GOOGLE_DOCS});
       return;
     }
     sendResponse(response);
@@ -363,19 +443,22 @@ chrome.runtime.onMessage.addListener(async(msg: any, _sender: chrome.runtime.Mes
   else if (msg.type === MessageType.DOMMutationEvent) {
     handleDomMutationEvent(msg, _sender, sendResponse);
   }
+  else if (msg.type === MessageType.ApiEvent) {
+    handleApiEvent(msg, _sender, sendResponse);
+  }
   else {
     console.log("Unknown message type in content-script:", msg);
   }
   return true; // keep channel open for async
 });
 
-chrome.tabs.onCreated.addListener(async (tab: chrome.tabs.Tab) => {
-  console.log("[bg] action clicked:", tab.id, tab.url);
-});
+// chrome.tabs.onCreated.addListener(async (tab: chrome.tabs.Tab) => {
+//   console.log("[bg] action clicked:", tab.id, tab.url);
+// });
 
-chrome.tabs.onReplaced.addListener(async (addedTabId: number, removedTabId: number) => {
-  console.log("[bg] tab replaced:", addedTabId, removedTabId)
-});
+// chrome.tabs.onReplaced.addListener(async (addedTabId: number, removedTabId: number) => {
+//   console.log("[bg] tab replaced:", addedTabId, removedTabId)
+// });
 
 const checkPermissionGranted = async (url: URL) => {
   if (!["http:", "https:"].includes(url.protocol)) {
@@ -469,7 +552,6 @@ chrome.storage.onChanged.addListener(
 chrome.runtime.onMessageExternal.addListener(
   (msg: any, sender: chrome.runtime.MessageSender, sendResponse: (res?: any) => void
 ) => {
-  console.log("Received external message:", sender, sender.tab);
   (async () => {
     try {
       if (!sender.origin?.startsWith(process.env.NEXT_PUBLIC_SITE_URL!)) {

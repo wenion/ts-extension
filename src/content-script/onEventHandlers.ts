@@ -4,11 +4,17 @@ import {
   onPointerDown,
   onKeyDown,
   onInput,
+  onCut,
+  onCopy,
+  onPaste,
   onChatgptMutation,
 } from "./onEvents";
 
 export const pointerDownHandler = (event: PointerEvent) => onPointerDown(event, sender);
 export const keyDownHandler = (event: KeyboardEvent) => onKeyDown(event, sender);
+export const copyHandler = (event: ClipboardEvent) => onCopy(event, sender);
+export const cutHandler = (event: ClipboardEvent) => onCut(event, sender);
+export const pasteHandler = (event: ClipboardEvent) => onPaste(event, sender);
 export const inputHandler = (event: Event) => onInput(event, sender);
 
 export const chatgptMutationHandler  = (

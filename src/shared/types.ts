@@ -7,6 +7,16 @@ export const MessageType = {
   LogoutEvent: "LogoutEvent",
 } as const;
 
+export type MessageType = keyof typeof MessageType;
+
+export const Source = {
+  CHATGPT: "chatgpt",
+  GOOGLE_DOCS: "google_docs",
+} as const;
+
+export type Source =
+  typeof Source[keyof typeof Source];
+
 export type Profile ={
   id: string;
   email: string;
@@ -14,8 +24,6 @@ export type Profile ={
   avatar_url: string;
   updated_at: string;
 };
-
-export type MessageType = keyof typeof MessageType;
 
 // User Event Trace type
 export type UserEventTrace = {
@@ -81,13 +89,14 @@ export type DOMMutationEventTrace = {
 
 // API Event Trace type
 export type ApiEventTrace = {
-  method: string;
-  endpoint: string;
   eventType: string;
+  subType?: string;
+  method: string;
   url: string;
   pageType: string;
   author: string;
   eventId: string;
+  source: string;
   eventValue?: string;
   eventState?: string;
   startPosition?: number;
@@ -144,6 +153,12 @@ export type TraceRecord = {
    * Position of cursor in text container
    */
   cursor_position: number | null;
+
+  /**
+   * end_position
+   * Position of final cursor in text container
+   */
+  end_position: number | null;
 
   /**
    * event_time
