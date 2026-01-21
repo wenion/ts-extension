@@ -1,3 +1,14 @@
+export class HttpError<T = unknown> extends Error {
+  readonly status: number;
+  readonly data?: T;
+
+  constructor(status: number, data?: T, message?: string) {
+    super(message ?? `HTTP ${status}`);
+    this.name = "HttpError";
+    this.status = status;
+    this.data = data;
+  }
+}
 
 type QueryParams = Record<
   string,
@@ -10,9 +21,6 @@ interface AuthedFetchOptions extends Omit<RequestInit, "body"> {
   body?: unknown; // JSON body by default
   rawBody?: BodyInit; // if you want full control
   baseUrl?: string; // optional override
-
-  /** called for any !res.ok (including 401 if you want) */
-  onError?: (response: Response) => void | Promise<void>;
 }
 
 export async function fetchJson<T = any>(
@@ -27,7 +35,6 @@ export async function fetchJson<T = any>(
     baseUrl = process.env.NEXT_PUBLIC_SITE_URL!,
     headers,
     token,
-    onError,
     ...rest
   } = options;
 
@@ -54,15 +61,8 @@ export async function fetchJson<T = any>(
   });
 
   if (!res.ok) {
-    if (onError) {
-      await onError(res);
-      return undefined;
-    }
-
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Request failed (${res.status}): ${text || res.statusText}`
-    );
+    const data = await res.json().catch(() => undefined);
+    throw new HttpError(res.status, data, data?.error ?? `HTTP ${res.status}`);
   }
 
   // handle empty responses

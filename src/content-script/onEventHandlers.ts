@@ -1,8 +1,8 @@
 import {
   userEventSender as sender,
-  mutationEventSender,
   onPointerDown,
   onKeyDown,
+  onChange,
   onInput,
   onCut,
   onCopy,
@@ -12,6 +12,7 @@ import {
 
 export const pointerDownHandler = (event: PointerEvent) => onPointerDown(event, sender);
 export const keyDownHandler = (event: KeyboardEvent) => onKeyDown(event, sender);
+export const changeHandler = (event: Event) => onChange(event, sender);
 export const copyHandler = (event: ClipboardEvent) => onCopy(event, sender);
 export const cutHandler = (event: ClipboardEvent) => onCut(event, sender);
 export const pasteHandler = (event: ClipboardEvent) => onPaste(event, sender);
@@ -24,7 +25,7 @@ export const chatgptMutationHandler  = (
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   const func = (node: HTMLElement) => {
-    return onChatgptMutation(node, mutationEventSender);
+    return onChatgptMutation(node, sender);
   };
 
   return (mutationList: MutationRecord[], observer: MutationObserver) => {

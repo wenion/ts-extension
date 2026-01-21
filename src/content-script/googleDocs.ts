@@ -7,14 +7,13 @@ import {
   XHRHookConfig,
 } from "./xhrHookMessageProtocol";
 
-import type { ApiEventTrace } from "../shared/types";
-import { MessageType, Source } from "../shared/types";
+import type { UserEventTrace } from "../shared/types";
 
 let googleDocsMessageHandler: ((event: MessageEvent) => void) | null = null;
 
-function postMessageToContentScript(data: ApiEventTrace) {
+function postMessageToContentScript(data: UserEventTrace) {
   chrome.runtime.sendMessage({
-    type: MessageType.ApiEvent,
+    type: "UserEvent",
     payload: data
   });
 }
@@ -42,36 +41,34 @@ export const googleDocsHandler = (
         if (type === "is") {
           const ibi = content.ibi;
           const text = content.s;
-          const data: ApiEventTrace = {
-            method: "POST",
+          const data: UserEventTrace = {
+            tag: "POST",
             eventType: "keystroke",
-            subType: "insert",
+            elementType: "insert",
             url: window.location.href,
-            pageType: "editor",
             author: "human",
-            source: Source.GOOGLE_DOCS,
-            eventId: meta.requestId,
+            sessionId: meta.requestId,
             eventValue: text,
             startPosition: ibi,
-            eventTime: new Date().toISOString(),
+            timestamp: Date.now(),
+            source: "API",
           }
           postMessageToContentScript(data);
         }
         else if (type === "ds") {
           const si = content.si;
           const ei = content.ei;
-          const data: ApiEventTrace = {
-            method: "POST",
+          const data: UserEventTrace = {
+            tag: "POST",
             eventType: "keystroke",
-            subType: "delete",
+            elementType: "delete",
             url: window.location.href,
-            pageType: "editor",
             author: "human",
-            source: Source.GOOGLE_DOCS,
-            eventId: meta.requestId,
-            eventTime: new Date().toISOString(),
+            sessionId: meta.requestId,
+            timestamp: Date.now(),
             startPosition: si,
             endPosition: ei,
+            source: "API",
           }
           postMessageToContentScript(data);
         }
@@ -81,37 +78,35 @@ export const googleDocsHandler = (
             if (item.ty === "is") {
               const ibi = item.ibi;
               const text = item.s;
-              const data: ApiEventTrace = {
-                method: "POST",
+              const data: UserEventTrace = {
+                tag: "POST",
                 eventType: "keystroke",
-                subType: "insert",
+                elementType: "insert",
                 url: window.location.href,
-                pageType: "editor",
                 author: "human",
-                source: Source.GOOGLE_DOCS,
-                eventValue: text?? "",
-                eventId: meta.requestId,
-                eventTime: new Date().toISOString(),
+                eventValue: text ?? "",
+                sessionId: meta.requestId,
+                timestamp: Date.now(),
                 startPosition: ibi,
+                source: "API",
               }
               postMessageToContentScript(data);
             }
             else if (item.ty === "ds") {
               const si = item.si;
               const ei = item.ei;
-              const data: ApiEventTrace = {
-                method: "POST",
+              const data: UserEventTrace = {
+                tag: "POST",
                 eventType: "keystroke",
-                subType: "delete",
+                elementType: "delete",
                 url: window.location.href,
-                pageType: "editor",
                 author: "human",
-                source: Source.GOOGLE_DOCS,
                 eventValue: "",
-                eventId: meta.requestId,
-                eventTime: new Date().toISOString(),
+                sessionId: meta.requestId,
+                timestamp: Date.now(),
                 startPosition: si,
                 endPosition: ei,
+                source: "API",
               }
               postMessageToContentScript(data);
             }
@@ -130,18 +125,17 @@ export const googleDocsHandler = (
         const body = JSON.parse(msg.body);
         const suggestionText = body[0][0];
 
-        const data: ApiEventTrace = {
-          method: "POST",
+        const data: UserEventTrace = {
+          tag: "POST",
           eventType: "input",
-          subType: "change",
-          source: Source.GOOGLE_DOCS,
+          elementType: "suggestion",
           url: window.location.href,
-          pageType: "editor",
           author: "human",
           eventState: suggestionText,
           eventValue: body.prompt ?? "",
-          eventId: meta.requestId,
-          eventTime: new Date().toISOString(),
+          sessionId: meta.requestId,
+          timestamp: Date.now(),
+          source: "API",
         }
         postMessageToContentScript(data);
       } catch (e) {

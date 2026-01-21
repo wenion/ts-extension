@@ -1,11 +1,10 @@
-import type { UserEventTrace, DOMMutationEventTrace } from "../shared/types";
-import { MessageType } from "../shared/types";
+import type { UserEventTrace } from "../shared/types";
 import { getXPath } from './xpath';
 import { getFormVisibleContainerId } from "../shared/util";
 
 export const userEventSender = (trace: UserEventTrace) => {
   chrome.runtime.sendMessage({
-    type: MessageType.UserEvent,
+    type: "UserEvent",
     payload: trace
   });
 }
@@ -16,17 +15,16 @@ export const onPointerDown = (
 ) : void => {
   const target = event.target;
   const data = {} as UserEventTrace;
-  data.eventType = "pointerdown";
+  data.source = "UserEvent";
+  data.eventType = event.type;
 
   if (!target || !(target instanceof Element)) return;
 
   if (target instanceof HTMLInputElement) {
-    const subType = target.type.toLowerCase();
-    data.subType = subType;
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = target.name;
     data.placeholder = target.placeholder;
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = event.clientX;
     data.clientY = event.clientY;
@@ -35,14 +33,14 @@ export const onPointerDown = (
     data.xpath = getXPath(target);
 
     let originValue: string | number | boolean = target.value;
-    if (subType === "checkbox" || subType === "radio") {
-      data.originValue = target.checked;
+    if (data.elementType === "checkbox" || data.elementType === "radio") {
+      data.originValue = target.checked.toString();
       data.valueName = "checked";
-    } else if (subType === "file") {
-      data.originValue = target.files?.length || 0;
+    } else if (data.elementType === "file") {
+      data.originValue = (target.files?.length || 0).toString();
       data.valueName = "files";
-    } else if (subType === "range" || subType === "number") {
-      data.originValue = target.valueAsNumber;
+    } else if (data.elementType === "range" || data.elementType === "number") {
+      data.originValue = target.valueAsNumber.toString();
       data.valueName = "valueAsNumber";
     } else {
       data.originValue = target.value;
@@ -61,12 +59,10 @@ export const onPointerDown = (
     }
   }
   else if (target instanceof HTMLTextAreaElement) {
-    const subType = target.type.toLowerCase();
-    data.subType = subType;
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = target.name;
     data.placeholder = target.placeholder;
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = event.clientX;
     data.clientY = event.clientY;
@@ -83,11 +79,9 @@ export const onPointerDown = (
     }
   }
   else if (target instanceof HTMLSelectElement) {
-    const subType = target.type.toLowerCase();
-    data.subType = subType;
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = target.name;
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = event.clientX;
     data.clientY = event.clientY;
@@ -107,11 +101,9 @@ export const onPointerDown = (
     }
   }
   else if (target instanceof HTMLButtonElement) {
-    const subType = target.type.toLowerCase();
-    data.subType = subType;
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = target.name;
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = event.clientX;
     data.clientY = event.clientY;
@@ -128,11 +120,9 @@ export const onPointerDown = (
     }
   }
   else if (target instanceof HTMLAnchorElement) {
-    const subType = target.type.toLowerCase();
-    data.subType = subType;
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = "";
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = event.clientX;
     data.clientY = event.clientY;
@@ -144,13 +134,12 @@ export const onPointerDown = (
     data.valueName = "href";
     data.valueType = typeof data.originValue;
 
-    data.label = "";
+    data.label = target.innerText || "";
   }
   else if (target instanceof HTMLDivElement) {
-    data.tag = target.tagName.toLowerCase();
-    data.subType = "";
+    data.tag = target.tagName;
+
     data.name = (target as any).name || "";
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = event.clientX;
     data.clientY = event.clientY;
@@ -160,14 +149,12 @@ export const onPointerDown = (
     data.originValue = "";
     data.valueName = "";
     data.valueType = "";
-    data.label = "";
+    data.label = target.innerText || "";
   }
   else if (target instanceof Element) {
-    data.tag = target.tagName.toLowerCase();
-    data.subType = "";
+    data.tag = target.tagName;
 
     data.name = (target as any).name || "";
-    data.innerText = "";
     data.textContent = target.textContent || "";
     data.clientX = event.clientX;
     data.clientY = event.clientY;
@@ -191,19 +178,18 @@ export const onChange = (
 ) : void => {
   const target = event.target;
   const data = {} as UserEventTrace;
-  data.eventType = "change";
+  data.eventType = event.type;
+  data.source = "UserEvent";
 
   if (!target || !(target instanceof HTMLElement)) return;
 
   data.containerId = getFormVisibleContainerId(target);
 
   if (target instanceof HTMLInputElement) {
-    const subType = target.type.toLowerCase();
-    data.subType = subType;
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = target.name;
     data.placeholder = target.placeholder;
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = 0;
     data.clientY = 0;
@@ -211,14 +197,14 @@ export const onChange = (
     data.height = window.innerHeight;
     data.xpath = getXPath(target);
 
-    if (subType === "checkbox" || subType === "radio") {
-      data.originValue = target.checked;
+    if (data.elementType === "checkbox" || data.elementType === "radio") {
+      data.originValue = target.checked.toString();
       data.valueName = "checked";
-    } else if (subType === "file") {
-      data.originValue = target.files?.length || 0;
+    } else if (data.elementType === "file") {
+      data.originValue = (target.files?.length || 0).toString();
       data.valueName = "files";
-    } else if (subType === "range" || subType === "number") {
-      data.originValue = target.valueAsNumber;
+    } else if (data.elementType === "range" || data.elementType === "number") {
+      data.originValue = target.valueAsNumber.toString();
       data.valueName = "valueAsNumber";
     } else {
       data.originValue = target.value;
@@ -231,12 +217,10 @@ export const onChange = (
     }
   }
   else if (target instanceof HTMLTextAreaElement) {
-    const subType = target.type.toLowerCase();
-    data.subType = subType;
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = target.name;
     data.placeholder = target.placeholder;
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = NaN;
     data.clientY = NaN;
@@ -253,11 +237,9 @@ export const onChange = (
     }
   }
   else if (target instanceof HTMLSelectElement) {
-    const subType = target.type.toLowerCase();
-    data.subType = subType;
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = target.name;
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
 
     data.width = window.innerWidth;
@@ -276,10 +258,8 @@ export const onChange = (
     }
   }
   else if (target instanceof Element) {
-    data.tag = target.tagName.toLowerCase();
-    data.subType = "";
+    data.tag = target.tagName;
     data.name = (target as any).name || "";
-    data.innerText = "";
     data.textContent = target.textContent || "";
     data.clientX = NaN;
     data.clientY = NaN;
@@ -292,7 +272,7 @@ export const onChange = (
     data.valueIndex = NaN;
     data.valueLabel = "";
     data.direction = "";
-    data.label = "";
+    data.label = target.innerText || "";
   }
 
   func && func(data);
@@ -305,16 +285,16 @@ export const onSelect = (
   const target = event.target;
   if (!target || !(target instanceof Element)) return;
   const data = {} as UserEventTrace;
-  data.eventType = "select";
+  data.source = "UserEvent";
+  data.eventType = event.type;
 
   if (target instanceof HTMLInputElement ) {
     if (target.selectionStart === null || target.selectionEnd === null) return;
 
-    data.subType = target.type.toLowerCase();
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = target.name;
     data.placeholder = target.placeholder;
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = target.selectionStart;
     data.clientY = target.selectionEnd;
@@ -331,14 +311,13 @@ export const onSelect = (
       data.label = Array.from(target.labels).map(l => l.textContent).join(" | ");
     }
   }
-  else if (target instanceof HTMLTextAreaElement ) {
+  else if (target instanceof HTMLTextAreaElement) {
     if (target.selectionStart === null || target.selectionEnd === null) return;
 
-    data.subType = target.type.toLowerCase();
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
+    data.elementType = target.type;
     data.name = target.name;
     data.placeholder = target.placeholder;
-    data.innerText = target.innerText;
     data.textContent = target.textContent || "";
     data.clientX = target.selectionStart;
     data.clientY = target.selectionEnd;
@@ -372,11 +351,13 @@ export const onMouseUp = (
   if (!selection) return;
 
   const data = {} as UserEventTrace;
-  data.eventType = "mouseup";
-  data.subType = "";
-  data.tag = target.tagName.toLowerCase();
+  data.source = "UserEvent";
+  data.eventType = event.type;
+  if ("type" in target && typeof (target as any).type === "string") {
+    data.elementType = (target as any).type;
+  }
+  data.tag = target.tagName;
   data.name = (target as any).name || "";
-  data.innerText = "";
   data.textContent = target.textContent || "";
   data.clientX = event.clientX;
   data.clientY = event.clientY;
@@ -398,8 +379,6 @@ export const onKeyDown = (
   func?: (trace: UserEventTrace) => void
 ) : void => {
   const target = event.target;
-  const data = {} as UserEventTrace;
-  data.eventType = "keydown";
 
   if (!target) return;
 
@@ -412,9 +391,29 @@ export const onKeyDown = (
 
   if (!isNativeInput && !isInContentEditable) return;
 
-  data.tag = (target as Element).tagName?.toLowerCase() || "";
+  const MODIFIER_KEYS = new Set([
+    "Shift",
+    "Control",
+    "Alt",
+    "Meta",
+    "CapsLock"
+  ]);
+
+  if (
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    MODIFIER_KEYS.has(event.key)
+  ) {
+    return;
+  }
+
+  const data = {} as UserEventTrace;
+  data.eventType = event.type;
+  data.source = "UserEvent";
+
+  data.tag = (target as Element).tagName || "";
   data.name = (target as any).name || "";
-  data.innerText = "";
   data.textContent = (target as Element).textContent || "";
   data.clientX = NaN;
   data.clientY = NaN;
@@ -424,21 +423,15 @@ export const onKeyDown = (
 
   data.code = event.code;
   data.key = event.key;
-  data.altKey = event.altKey;
-  data.ctrlKey = event.ctrlKey;
-  data.metaKey = event.metaKey;
-  data.shiftKey = event.shiftKey;
 
   data.timestamp = Date.now();
 
   data.eventValue = data.key;
   data.eventState = data.textContent;
 
-  data.author = "human";
-
   if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
     // data.eventState = target.value;
-    data.cursorPosition = target.selectionStart ?? undefined;
+    data.startPosition = target.selectionStart ?? undefined;
   } else {
     function getCaretPositionInContentEditable(el: HTMLElement): number | null {
       const selection = window.getSelection();
@@ -453,41 +446,41 @@ export const onKeyDown = (
     if (target instanceof HTMLElement && target.isContentEditable) {
       // data.eventState = target.innerText;
       const pos = getCaretPositionInContentEditable(target);
-      data.cursorPosition = pos === null ? undefined : pos;
+      data.startPosition = pos === null ? undefined : pos;
     }
   }
 
-  func && func(data);
+  func?.(data);
 }
 
 export const onInput = (
   event: Event,
   func?: (trace: UserEventTrace) => void
 ) : void => {
+  if (!(event instanceof InputEvent)) return;
+
   const target = event.target;
   const data = {} as UserEventTrace;
-  data.eventType = "input";
+  data.source = "UserEvent";
+  data.eventType = event.type;
+  data.timestamp = Date.now();
 
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-    data.eventState = target.value;
-    data.cursorPosition = target.selectionStart ?? undefined;
-    data.textContent = target.textContent || "";
-    data.eventValue = (event as InputEvent).data ?? "";
-    data.eventState = data.textContent;
-    data.timestamp = Date.now();
-    data.xpath = getXPath(target as Element);
-    data.tag = (target as Element).tagName?.toLowerCase() || "";
-  }
-
-  if (target instanceof HTMLElement && target.isContentEditable) {
+    data.startPosition = target.selectionStart ?? undefined;
+    data.textContent = target.textContent;
+    data.eventValue = event.data ?? "";
     data.eventState = target.innerText;
-    data.eventValue = (event as InputEvent).data ?? "";
-
     data.xpath = getXPath(target as Element);
-    data.tag = (target as Element).tagName?.toLowerCase() || "";
+    data.tag = target.tagName;
+  }
+  else if (target instanceof HTMLElement && target.isContentEditable) {
+    data.eventState = target.innerText;
+    data.eventValue = event.data ?? "";
+    data.xpath = getXPath(target as Element);
+    data.tag = target.tagName;
   }
 
-  func && func(data);
+  func?.(data);
 }
 
 export const onScroll = (
@@ -495,7 +488,8 @@ export const onScroll = (
   func?: (trace: UserEventTrace) => void
 ) : void => {
   const data = {} as UserEventTrace;
-  data.eventType = "scroll";
+  data.eventType = event.type;
+  data.source = "UserEvent";
   
   data.clientX = window.scrollX;
   data.clientY = window.scrollY;
@@ -511,7 +505,8 @@ export const onWheel = (
   func?: (trace: UserEventTrace) => void
 ) : void => {
   const data = {} as UserEventTrace;
-  data.eventType = "scroll";
+  data.eventType = event.type;
+  data.source = "UserEvent";
   
   data.clientX = window.scrollX;
   data.clientY = window.scrollY;
@@ -545,19 +540,20 @@ export const onCut = (
   }
 
   const data = {} as UserEventTrace;
-  data.eventType = "cut";
+  data.source = "UserEvent";
+  data.eventType = event.type;
   data.textContent = text;
   data.eventState = text;
 
   if (target) {
-    data.tag = target.tagName.toLowerCase();
+    data.tag = target.tagName;
 
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      data.innerText = target.value;
+      // data.innerText = target.value;
       data.name = target.name ?? "";
       data.placeholder = target.placeholder ?? "";
     } else {
-      data.innerText = target.innerText ?? "";
+      // data.innerText = target.innerText ?? "";
       data.name = "";
       data.placeholder = "";
     }
@@ -573,21 +569,28 @@ export const onCopy = (
   const clipboardText = event.clipboardData?.getData("text/plain") ?? "";
 
   const data = {} as UserEventTrace;
-  data.eventType = "copy";
+  data.source = "UserEvent";
+  data.eventType = event.type;
   data.textContent = clipboardText;
   data.eventState = clipboardText;
 
+  const selection = document.getSelection();
+  const selectedText = selection ? selection.toString() : "";
+
   const target = event.target as HTMLElement | null;
   if (target) {
-    data.tag = target.tagName.toLowerCase();
-    data.innerText = target.innerText ?? "";
+    data.tag = target.tagName;
     data.name = (target as HTMLInputElement).name ?? "";
     data.placeholder = (target as HTMLInputElement).placeholder ?? "";
   }
 
+  if (selectedText !== clipboardText && clipboardText.length < selectedText.length) {
+    data.textContent = selectedText;
+    data.eventState = selectedText;
+  }
+
   func?.(data);
 };
-
 
 export const onPaste = (
   event: ClipboardEvent,
@@ -597,57 +600,53 @@ export const onPaste = (
     event.clipboardData?.getData("text/plain") ?? "";
 
   const data = {} as UserEventTrace;
-  data.eventType = "paste";
+  data.source = "UserEvent";
+  data.eventType = event.type;
   data.textContent = clipboardText;
   data.eventState = clipboardText;
 
   const target = event.target as HTMLElement | null;
   if (target) {
-    data.tag = target.tagName.toLowerCase();
-    data.innerText = target.innerText ?? "";
-    data.name = (target as HTMLInputElement).name ?? "";
-    data.placeholder = (target as HTMLInputElement).placeholder ?? "";
+    data.tag = target.tagName;
 
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      data.cursorPosition = target.selectionStart ?? undefined;
+      data.name = (target as HTMLInputElement).name ?? "";
+      data.placeholder = (target as HTMLInputElement).placeholder ?? "";
+      data.startPosition = target.selectionStart ?? undefined;
       data.originValue = target.value;
       data.valueType = typeof target.value;
+    }
+    else {
+      data.originValue = target.textContent ?? "";
     }
   }
 
   func?.(data);
 };
 
-export const mutationEventSender = (trace: DOMMutationEventTrace) => {
-  chrome.runtime.sendMessage({
-    type: MessageType.DOMMutationEvent,
-    payload: trace
-  });
-};
-
 const onMutation = (
   node: HTMLElement,
-  builder: (node: HTMLElement) => DOMMutationEventTrace,
-  func?: (trace: DOMMutationEventTrace) => void
+  builder: (node: HTMLElement) => UserEventTrace,
+  func?: (trace: UserEventTrace) => void
 ) => {
   const data = builder(node);
-  func && func(data);
+  func?.(data);
 };
 
 export const onChatgptMutation = (
   node: HTMLElement,
-  sender: (trace: DOMMutationEventTrace) => void
+  sender: (trace: UserEventTrace) => void
 ) => {
   const builder = (node: HTMLElement) => {
-    const data = {} as DOMMutationEventTrace;
-    data.eventType = "chatgpt";
+    const data = {} as UserEventTrace;
+    data.eventType = "mutation";
     data.url = window.location.href;
-    data.tag = "ARTICLE";
-    data.pageType = "AI";
+    data.tag = node.tagName;
     data.author = node.getAttribute("data-turn") === "user" ? "human" : "AI";
     data.message = node.innerText;
-    data.eventId = node.getAttribute("data-testid") || "";
-    data.eventTime = new Date().toISOString();
+    data.sessionId = node.getAttribute("data-testid") || "";
+    data.timestamp = Date.now();
+    data.source = "Mutation";
     return data;
   };
   onMutation(node, builder, sender);

@@ -5,17 +5,16 @@ import {
   removeGoogleDocsEventListener,
   googleDocsHandler,
 } from "./googleDocs";
-
 import {
   pointerDownHandler,
   keyDownHandler,
+  changeHandler,
   inputHandler,
   cutHandler,
   copyHandler,
   pasteHandler,
   chatgptMutationHandler,
 } from "./onEventHandlers";
-import { Source } from "../shared/types";
 
 // Global variables
 let observer: MutationObserver | null = null;
@@ -53,6 +52,7 @@ chrome.runtime.onMessage.addListener(onMessage);
 const init = () => {
   document.addEventListener("pointerdown", pointerDownHandler);
   document.addEventListener("keydown", keyDownHandler);
+  document.addEventListener("change", changeHandler);
   document.addEventListener("input", inputHandler);
   document.addEventListener("copy", copyHandler);
   document.addEventListener("cut", cutHandler);
@@ -62,6 +62,7 @@ const init = () => {
 const deinit = () => {
   document.removeEventListener("pointerdown", pointerDownHandler);
   document.removeEventListener("keydown", keyDownHandler);
+  document.removeEventListener("change", changeHandler);
   document.removeEventListener("input", inputHandler);
   document.removeEventListener("copy", copyHandler);
   document.removeEventListener("cut", cutHandler);
@@ -74,7 +75,7 @@ chrome.runtime.sendMessage({
   payload: { url: window.location.href }
 }).then(res => {
   if (res.ok) {
-    if (res.origin === Source.CHATGPT) {
+    if (res.origin === "chatgpt") {
       init();
       const chatgptMutationConfig = {
         childList: true, // Watch for addition or removal of child nodes
@@ -88,7 +89,7 @@ chrome.runtime.sendMessage({
         chatgptMutationHandler()
       )
     }
-    else if (res.origin === Source.GOOGLE_DOCS) {
+    else if (res.origin === "google_docs") {
       const iframe = document.querySelector('iframe.docs-texteventtarget-iframe') as HTMLIFrameElement | null;
       if (iframe && iframe.contentDocument) {
         contentEditableElement = iframe.contentDocument.querySelector('[contenteditable="true"]');

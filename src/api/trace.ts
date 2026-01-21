@@ -1,15 +1,13 @@
-import { TraceRecord } from "../shared/types";
+import { UserEventTrace } from "../shared/types";
 import { fetchJson } from "./fetch";
 
 export const insertTrace = async (
-  trace: TraceRecord,
+  trace: UserEventTrace,
   token?: string,
-  onError?: (response: Response) => void | Promise<void>,
 ): Promise<{ id: string } | undefined> => {
-  return fetchJson<{ id: string } | undefined>("/api/traces", {
+  return fetchJson<{ id: string } | undefined>("/api/v1/traces", {
     method: "POST",
     body: trace,
     token,
-    onError,
   });
 }

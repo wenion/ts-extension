@@ -1,21 +1,4 @@
-export const MessageType = {
-  UserEvent: "UserEvent",
-  NavigationEvent: "NavigationEvent",
-  DOMMutationEvent: "DOMMutationEvent",
-  ApiEvent: "ApiEvent",
-  LoginEvent: "LoginEvent",
-  LogoutEvent: "LogoutEvent",
-} as const;
-
-export type MessageType = keyof typeof MessageType;
-
-export const Source = {
-  CHATGPT: "chatgpt",
-  GOOGLE_DOCS: "google_docs",
-} as const;
-
-export type Source =
-  typeof Source[keyof typeof Source];
+export type TraceSource = "UserEvent" | "Mutation" | "API";
 
 export type Profile ={
   id: string;
@@ -27,82 +10,51 @@ export type Profile ={
 
 // User Event Trace type
 export type UserEventTrace = {
-  eventType: string;
-  tag: string;
-  subType?: string; // target.type
-  name: string;
-  placeholder: string;
-  innerText: string;
-  textContent: string;
+  eventType?: string; // API url
+  tag?: string; // API Method
+  elementType?: string; // API Subtype
+
+  url?: string;
+  name?: string;
+  placeholder?: string;
+  textContent?: string;
   //clientX: selectionStart for input[select event]
   //clientX: scrollX for scroll and wheel
-  clientX: number;
+  clientX?: number;
   //selectionEnd for input[select event]
   //scrollY for scroll and wheel
-  clientY: number;
-  width: number;
-  height: number;
-  xpath: string;
+  clientY?: number;
+  width?: number;
+  height?: number;
+  xpath?: string;
 
-  valueName: string; // for input change
-  originValue: any; // avoid circular structure
-  valueType: string; // typeof value
+  valueName?: string; // for input change
+  originValue?: string; // avoid circular structure
+  valueType?: string; // typeof value
   // for select element
-  valueIndex: number;
-  valueLabel: string;
+  valueIndex?: number;
+  valueLabel?: string;
 
   // "backward"/"forward" for select event and selection
-  direction: string;
+  direction?: string;
 
-  label: string;
-  timestamp: number;
+  label?: string;
+  timestamp?: number;
 
-  code: string; // for keyboard event
-  key: string; // for keyboard event
-  altKey: boolean; // for keyboard event
-  ctrlKey: boolean; // for keyboard event
-  metaKey: boolean; // for keyboard event
-  shiftKey: boolean; // for keyboard event
+  code?: string; // for keyboard event
+  key?: string; // for keyboard event
 
   message?: string;
   eventValue?: string;
   eventState?: string;
   eventId?: string;
-  cursorPosition?: number;
-
-  pageType?: string;
-  author?: string;
-  containerId?: number;
-};
-
-// DOM Mutation Event Trace type
-export type DOMMutationEventTrace = {
-  eventType: string;
-  url: string;
-  tag: string;
-  pageType?: string;
-  author: string;
-  message: string;
-  eventId: string;
-  eventTime: string;
-};
-
-// API Event Trace type
-export type ApiEventTrace = {
-  eventType: string;
-  subType?: string;
-  method: string;
-  url: string;
-  pageType: string;
-  author: string;
-  eventId: string;
-  source: string;
-  eventValue?: string;
-  eventState?: string;
   startPosition?: number;
   endPosition?: number;
+
   sessionId?: string;
-  eventTime: string;
+  author?: string;
+  containerId?: number;
+  source: TraceSource;
 };
 
 // Database Trace record type
