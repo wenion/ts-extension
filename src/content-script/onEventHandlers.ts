@@ -19,7 +19,7 @@ export const pasteHandler = (event: ClipboardEvent) => onPaste(event, sender);
 export const inputHandler = (event: Event) => onInput(event, sender);
 
 export const chatgptMutationHandler  = (
-  delay: number = 10000
+  delay: number = 5000
 ) => {
   let target: HTMLElement | null = null;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
