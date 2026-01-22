@@ -17,6 +17,7 @@ export const onPointerDown = (
   const data = {} as UserEventTrace;
   data.source = "UserEvent";
   data.eventType = event.type;
+  data.timestamp = Date.now();
 
   if (!target || !(target instanceof Element)) return;
 
@@ -180,6 +181,7 @@ export const onChange = (
   const data = {} as UserEventTrace;
   data.eventType = event.type;
   data.source = "UserEvent";
+  data.timestamp = Date.now();
 
   if (!target || !(target instanceof HTMLElement)) return;
 
@@ -287,6 +289,7 @@ export const onSelect = (
   const data = {} as UserEventTrace;
   data.source = "UserEvent";
   data.eventType = event.type;
+  data.timestamp = Date.now();
 
   if (target instanceof HTMLInputElement ) {
     if (target.selectionStart === null || target.selectionEnd === null) return;
@@ -364,6 +367,7 @@ export const onMouseUp = (
   data.width = window.innerWidth;
   data.height = window.innerHeight;
   data.xpath = getXPath(target);
+  data.timestamp = Date.now();
 
   data.originValue = selection.toString();
   data.valueName = "";
@@ -423,9 +427,9 @@ export const onKeyDown = (
 
   data.code = event.code;
   data.key = event.key;
-
   data.timestamp = Date.now();
 
+  // TODO escape characters eventValue should be null for non-character keys
   data.eventValue = data.key;
   data.eventState = data.textContent;
 
@@ -544,6 +548,7 @@ export const onCut = (
   data.eventType = event.type;
   data.textContent = text;
   data.eventState = text;
+  data.timestamp = Date.now();
 
   if (target) {
     data.tag = target.tagName;
@@ -573,6 +578,7 @@ export const onCopy = (
   data.eventType = event.type;
   data.textContent = clipboardText;
   data.eventState = clipboardText;
+  data.timestamp = Date.now();
 
   const selection = document.getSelection();
   const selectedText = selection ? selection.toString() : "";
@@ -604,6 +610,7 @@ export const onPaste = (
   data.eventType = event.type;
   data.textContent = clipboardText;
   data.eventState = clipboardText;
+  data.timestamp = Date.now();
 
   const target = event.target as HTMLElement | null;
   if (target) {
@@ -650,4 +657,4 @@ export const onChatgptMutation = (
     return data;
   };
   onMutation(node, builder, sender);
-}
+};

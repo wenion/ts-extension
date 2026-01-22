@@ -70,7 +70,11 @@ const handleUserEvent = async (
     return;
   }
 
-  await sendTrace(msg.payload, _sender.tab.id, _sender.tab.url);
+  await sendTrace(
+    { ...msg.payload, url: msg.payload.url ? msg.payload.url : _sender.tab.url },
+    _sender.tab.id,
+    _sender.tab.url
+  );
 };
 
 const handleNavigationEvent = async (

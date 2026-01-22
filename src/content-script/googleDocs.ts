@@ -132,7 +132,7 @@ export const googleDocsHandler = (
           url: window.location.href,
           author: "human",
           eventState: suggestionText,
-          eventValue: body.prompt ?? "",
+          eventValue: body.prompt ?? null,
           sessionId: meta.requestId,
           timestamp: Date.now(),
           source: "API",
