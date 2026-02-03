@@ -429,6 +429,8 @@ export const onKeyDown = (
   data.key = event.key;
   data.timestamp = Date.now();
 
+  data.author = "human";
+
   // TODO escape characters eventValue should be null for non-character keys
   data.eventValue = data.key;
   data.eventState = data.textContent;
@@ -653,7 +655,46 @@ export const onChatgptMutation = (
     data.message = node.innerText;
     data.sessionId = node.getAttribute("data-testid") || "";
     data.timestamp = Date.now();
+    data.name = node.getAttribute("data-turn-id") || "";
     data.source = "Mutation";
+    return data;
+  };
+  onMutation(node, builder, sender);
+};
+
+export const onGeminiMutation = (
+  node: HTMLElement,
+  sender: (trace: UserEventTrace) => void
+) => {
+  const builder = (node: HTMLElement) => {
+    const data = {} as UserEventTrace;
+    data.eventType = "mutation";
+    data.url = window.location.href;
+    data.tag = node.tagName;
+    data.message = node.innerText;
+    data.timestamp = Date.now();
+    data.source = "Mutation";
+
+    if (data.tag === "USER-QUERY") {
+      data.author = "human";
+      const child = document.querySelector('div[id*="user-query-content"]');
+      data.sessionId = child ? child.getAttribute("data-ved") || child.getAttribute("id") || data.timestamp.toString() :
+        data.timestamp.toString();
+
+      const parent = node.parentElement;
+      data.name = parent ? parent.getAttribute("id") || "" : "";
+
+    } else if (data.tag === "MODEL-RESPONSE") {
+      data.author = "AI";
+      const child = document.querySelector('response-container[jslog]');
+      if (child) {
+        data.sessionId = child.getAttribute("data-ved") || data.timestamp.toString();
+        if (child.hasAttribute("jslog")) {
+          const jslog = child.getAttribute("jslog");
+          data.name = jslog? jslog.match(/r_[a-zA-Z0-9]+/)?.[0] || jslog.match(/c_[a-zA-Z0-9]+/)?.[0] || "" : "";
+        }
+      }
+    }
     return data;
   };
   onMutation(node, builder, sender);

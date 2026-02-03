@@ -14,6 +14,7 @@ import {
   copyHandler,
   pasteHandler,
   chatgptMutationHandler,
+  geminiMutationHandler,
 } from "./onEventHandlers";
 
 // Global variables
@@ -109,6 +110,21 @@ chrome.runtime.sendMessage({
         googleDocsConfig,
         googleDocsHandler()
       );
+    }
+    else if (res.origin === "gemini") {
+      init();
+      const geminiMutationConfig = {
+        childList: true,
+        attributes: true,
+        attributeFilter: ["id"],
+        subtree: true,
+        characterData: true,
+      };
+      observer = addMutationEventListener(
+        document.body,
+        geminiMutationConfig,
+        geminiMutationHandler()
+      )
     }
     else {
       init();

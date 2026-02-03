@@ -113,6 +113,10 @@ chrome.runtime.onMessage.addListener(async(msg: any, _sender: chrome.runtime.Mes
       sendResponse({...response, origin: "google_docs"});
       return;
     }
+    if (url.host === "gemini.google.com") {
+      sendResponse({...response, origin: "gemini"});
+      return;
+    }
     sendResponse(response);
   }
   else if (msg.type === "UserEvent") {

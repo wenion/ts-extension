@@ -8,6 +8,7 @@ import {
   onCopy,
   onPaste,
   onChatgptMutation,
+  onGeminiMutation
 } from "./onEvents";
 
 export const pointerDownHandler = (event: PointerEvent) => onPointerDown(event, sender);
@@ -19,7 +20,7 @@ export const pasteHandler = (event: ClipboardEvent) => onPaste(event, sender);
 export const inputHandler = (event: Event) => onInput(event, sender);
 
 export const chatgptMutationHandler  = (
-  delay: number = 5000
+  delay: number = 10000
 ) => {
   let target: HTMLElement | null = null;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -30,22 +31,62 @@ export const chatgptMutationHandler  = (
 
   return (mutationList: MutationRecord[], observer: MutationObserver) => {
     for (const mutation of mutationList) {
-      mutation.addedNodes.forEach((node) => {
-        if (node instanceof HTMLElement && node.tagName === "ARTICLE") {
-          if (target) {
-            func(target);
-          }
-          target = node;
-        }
-      });
       if (mutation.type === "characterData") {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
-        }
-        if (target) {
+        if (target && target.contains(mutation.target)) {
+          if (timeoutId) clearTimeout(timeoutId);
           timeoutId = setTimeout(func, delay, target);
         }
+      }
+
+      if (mutation.type === "childList") {
+        mutation.addedNodes.forEach((node) => {
+          if (
+            node instanceof HTMLElement &&
+            node.tagName === "ARTICLE"
+          ) {
+            if (target) {
+              func(target);
+            }
+            target = node;
+          }
+        });
+      }
+    }
+  }
+};
+
+export const geminiMutationHandler  = (
+  delay: number = 10000
+) => {
+  let target: HTMLElement | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const func = (node: HTMLElement) => {
+    return onGeminiMutation(node, sender);
+  };
+
+  return (mutationList: MutationRecord[], observer: MutationObserver) => {
+    for (const mutation of mutationList) {
+      if (mutation.type === "characterData" || mutation.type === "attributes") {
+        if (target && target.contains(mutation.target)) {
+          if (timeoutId) clearTimeout(timeoutId);
+          timeoutId = setTimeout(func, delay, target);
+        }
+      }
+
+      if (mutation.type === "childList") {
+        mutation.addedNodes.forEach((node) => {
+          if (
+            node instanceof HTMLElement &&
+            (node.tagName === "USER-QUERY" ||
+              node.tagName === "MODEL-RESPONSE")
+          ) {
+            if (target) {
+              func(target);
+            }
+            target = node;
+          }
+        });
       }
     }
   }
