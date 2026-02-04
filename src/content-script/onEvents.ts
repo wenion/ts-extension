@@ -416,9 +416,9 @@ export const onKeyDown = (
   data.eventType = event.type;
   data.source = "UserEvent";
 
-  data.tag = (target as Element).tagName || "";
-  data.name = (target as any).name || "";
-  data.textContent = (target as Element).textContent || "";
+  data.tag = (target as Element).tagName;
+  data.name = (target as any).name;
+  data.textContent = (target as Element).textContent;
   data.clientX = NaN;
   data.clientY = NaN;
   data.width = window.innerWidth;
@@ -470,21 +470,30 @@ export const onInput = (
   data.source = "UserEvent";
   data.eventType = event.type;
   data.timestamp = Date.now();
+  data.author = "human";
 
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
     data.startPosition = target.selectionStart ?? undefined;
     data.textContent = target.textContent;
-    data.eventValue = event.data ?? "";
+    data.eventValue = event.data ?? undefined;
     data.eventState = target.innerText;
     data.xpath = getXPath(target as Element);
     data.tag = target.tagName;
   }
   else if (target instanceof HTMLElement && target.isContentEditable) {
     data.eventState = target.innerText;
-    data.eventValue = event.data ?? "";
+    data.eventValue = event.data ?? undefined;
     data.xpath = getXPath(target as Element);
     data.tag = target.tagName;
   }
+  else {
+    data.eventValue = event.data ?? undefined;
+    data.xpath = getXPath(target as Element);
+    data.tag = (target as Element).tagName;
+  }
+
+  // if keydown is Backspace, eventValue is null, eventState is the updated text content
+  // if eventState is already empty, there will be no input event fired
 
   func?.(data);
 }
