@@ -622,6 +622,7 @@ export const onPaste = (
   data.textContent = clipboardText;
   data.eventState = clipboardText;
   data.timestamp = Date.now();
+  data.author = "human";
 
   const target = event.target as HTMLElement | null;
   if (target) {
