@@ -378,6 +378,92 @@ export const onMouseUp = (
   func && func(data);
 };
 
+type CaretInfo = {
+  absolutePosition: number;
+  line: number;     // 0-based
+  column: number;   // 0-based
+};
+
+function getCaretInfo(target: HTMLElement, key?: string): CaretInfo | null {
+
+  // ============================
+  // 1 TEXTAREA / INPUT
+  // ============================
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+
+    const value = target.value;
+    const start = target.selectionStart ?? 0;
+
+    const before = value.slice(0, start);
+    const lines = before.split("\n");
+
+    return {
+      absolutePosition: start,
+      line: lines.length - 1,
+      column: lines[lines.length - 1].length
+    };
+  }
+
+  // ============================
+  // 2 CONTENTEDITABLE
+  // ============================
+  if (target.isContentEditable) {
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+
+    const range = selection.getRangeAt(0);
+
+    const container = range.startContainer;
+
+    const paragraphs = Array.from(target.querySelectorAll("p"));
+
+    const currentParagraph =
+      container.nodeType === Node.TEXT_NODE
+        ? container.parentElement?.closest("p")
+        : (container as HTMLElement).closest("p");
+
+    if (!currentParagraph) return null;
+
+    const paragraphIndex = paragraphs.indexOf(currentParagraph);
+
+    let absolutePosition = 0;
+
+    // 1 Count previous paragraphs
+    for (let i = 0; i < paragraphIndex; i++) {
+      absolutePosition += (paragraphs[i].textContent ?? "").length;
+      if ((paragraphs[i + 1].textContent ?? "").length > 0) {
+        absolutePosition += 1;
+      }
+      else if ((paragraphs[i + 1].textContent ?? "").length === 0 && key !== "Enter") {
+        absolutePosition += 1;
+      }
+      else if ((paragraphs[i + 1].textContent ?? "").length === 0 && paragraphs[i + 2]?.textContent !== undefined) {
+        absolutePosition += 1;
+      }
+    }
+
+    // 2 Count offset inside current paragraph
+    const preRange = range.cloneRange();
+    preRange.selectNodeContents(currentParagraph);
+    preRange.setEnd(range.startContainer, range.startOffset);
+
+    absolutePosition += preRange.toString().length;
+
+    // 3 Convert to line + column
+    const line = paragraphIndex;
+    const column = preRange.toString().length;
+
+    return {
+      absolutePosition,
+      line,
+      column
+    };
+  }
+
+  return null;
+}
+
 export const onKeyDown = (
   event: KeyboardEvent,
   func?: (trace: UserEventTrace) => void
@@ -436,24 +522,32 @@ export const onKeyDown = (
   data.eventState = data.textContent;
 
   if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
-    // data.eventState = target.value;
+    data.eventState = target.value;
     data.startPosition = target.selectionStart ?? undefined;
-  } else {
-    function getCaretPositionInContentEditable(el: HTMLElement): number | null {
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return null;
+  }
+  else if (target instanceof HTMLElement && target.isContentEditable) {
+    let eventState = "";
+    if (target) {
+      const paragraphs = target.querySelectorAll("p");
 
-      const range = selection.getRangeAt(0);
-      const preRange = range.cloneRange();
-      preRange.selectNodeContents(el);
-      preRange.setEnd(range.endContainer, range.endOffset);
-      return preRange.toString().length; // number of characters before caret
+      paragraphs.forEach((p, index) => {
+        const text = p.textContent ?? "";
+        eventState += text;
+
+        // if (index === paragraphs.length - 2 && event.key === "Enter") {
+        // }
+        // else if (index !== paragraphs.length - 1) {
+        //   eventState += "\n";
+        // }
+        if (index !== paragraphs.length - 1) {
+          eventState += "\n";
+        }
+      });
     }
-    if (target instanceof HTMLElement && target.isContentEditable) {
-      // data.eventState = target.innerText;
-      const pos = getCaretPositionInContentEditable(target);
-      data.startPosition = pos === null ? undefined : pos;
-    }
+
+    data.eventState = eventState;
+    const caretInfo = getCaretInfo(target as HTMLElement, event.key);
+    data.startPosition = caretInfo?.absolutePosition;
   }
 
   func?.(data);
@@ -476,12 +570,25 @@ export const onInput = (
     data.startPosition = target.selectionStart ?? undefined;
     data.textContent = target.textContent;
     data.eventValue = event.data ?? undefined;
-    data.eventState = target.innerText;
+    data.eventState = target.value;
     data.xpath = getXPath(target as Element);
     data.tag = target.tagName;
   }
   else if (target instanceof HTMLElement && target.isContentEditable) {
-    data.eventState = target.innerText;
+    let eventState = "";
+    const paragraphs = target.querySelectorAll("p");
+    paragraphs.forEach((p, index) => {
+      const text = p.textContent ?? "";
+      eventState += text;
+      // if (index === paragraphs.length - 2 && event.data === "\n") {
+      // } else if (index !== paragraphs.length - 1) {
+      //   eventState += "\n";
+      // }
+      if (index !== paragraphs.length - 1) {
+        eventState += "\n";
+      }
+    });
+    data.eventState = eventState;
     data.eventValue = event.data ?? undefined;
     data.xpath = getXPath(target as Element);
     data.tag = target.tagName;
