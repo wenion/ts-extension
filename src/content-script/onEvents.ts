@@ -404,15 +404,50 @@ function getCaretInfo(target: HTMLElement, key?: string): CaretInfo | null {
     };
   }
 
-  // ============================
-  // 2 CONTENTEDITABLE
-  // ============================
-  if (target.isContentEditable) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
 
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return null;
+  // ============================
+  // 2 CodeMirror (Overleaf)
+  // ============================
+  if (target.classList.contains("cm-content")) {
 
-    const range = selection.getRangeAt(0);
+    const container = range.startContainer;
+
+    const lineEl =
+      container.nodeType === Node.TEXT_NODE
+        ? container.parentElement?.closest(".cm-line")
+        : (container as HTMLElement).closest(".cm-line");
+
+    if (!lineEl) return null;
+
+    const lines = Array.from(target.querySelectorAll(".cm-line"));
+    const lineIndex = lines.indexOf(lineEl);
+
+    let absolutePosition = 0;
+
+    for (let i = 0; i < lineIndex; i++) {
+      absolutePosition += (lines[i].textContent ?? "").length + 1;
+    }
+
+    const preRange = range.cloneRange();
+    preRange.selectNodeContents(lineEl);
+    preRange.setEnd(range.startContainer, range.startOffset);
+
+    const column = preRange.toString().length;
+
+    return {
+      absolutePosition: absolutePosition + column,
+      line: lineIndex,
+      column
+    };
+  }
+
+  // ============================
+  // 3 ProseMirror (ChatGPT / Notion)
+  // ============================
+  if (target.querySelector("p")) {
 
     const container = range.startContainer;
 
@@ -429,7 +464,6 @@ function getCaretInfo(target: HTMLElement, key?: string): CaretInfo | null {
 
     let absolutePosition = 0;
 
-    // 1 Count previous paragraphs
     for (let i = 0; i < paragraphIndex; i++) {
       absolutePosition += (paragraphs[i].textContent ?? "").length;
       if ((paragraphs[i + 1].textContent ?? "").length > 0) {
@@ -443,7 +477,6 @@ function getCaretInfo(target: HTMLElement, key?: string): CaretInfo | null {
       }
     }
 
-    // 2 Count offset inside current paragraph
     const preRange = range.cloneRange();
     preRange.selectNodeContents(currentParagraph);
     preRange.setEnd(range.startContainer, range.startOffset);
@@ -461,7 +494,59 @@ function getCaretInfo(target: HTMLElement, key?: string): CaretInfo | null {
     };
   }
 
-  return null;
+  // ============================
+  // 4 Google Docs
+  // ============================
+  if (target.querySelector(".kix-lineview")) {
+
+    const container = range.startContainer;
+
+    const lines = Array.from(document.querySelectorAll(".kix-lineview"));
+
+    const currentLine =
+      container.nodeType === Node.TEXT_NODE
+        ? container.parentElement?.closest(".kix-lineview")
+        : (container as HTMLElement).closest(".kix-lineview");
+
+    if (!currentLine) return null;
+
+    const lineIndex = lines.indexOf(currentLine);
+
+    let absolutePosition = 0;
+
+    for (let i = 0; i < lineIndex; i++) {
+      absolutePosition += (lines[i].textContent ?? "").length + 1;
+    }
+
+    const preRange = range.cloneRange();
+    preRange.selectNodeContents(currentLine);
+    preRange.setEnd(range.startContainer, range.startOffset);
+
+    const column = preRange.toString().length;
+
+    return {
+      absolutePosition: absolutePosition + column,
+      line: lineIndex,
+      column
+    };
+  }
+
+  // ============================
+  // 5 Generic contenteditable fallback
+  // ============================
+
+  const preRange = range.cloneRange();
+  preRange.selectNodeContents(target);
+  preRange.setEnd(range.startContainer, range.startOffset);
+
+  const text = preRange.toString();
+  const lines = text.split("\n");
+
+  return {
+    absolutePosition: text.length,
+    line: lines.length - 1,
+    column: lines[lines.length - 1].length
+  };
 }
 
 export const onKeyDown = (
@@ -528,7 +613,7 @@ export const onKeyDown = (
   else if (target instanceof HTMLElement && target.isContentEditable) {
     let eventState = "";
     if (target) {
-      const paragraphs = target.querySelectorAll("p");
+      const paragraphs = target.querySelectorAll("p, .cm-line, .kix-lineview");
 
       paragraphs.forEach((p, index) => {
         const text = p.textContent ?? "";
@@ -576,7 +661,7 @@ export const onInput = (
   }
   else if (target instanceof HTMLElement && target.isContentEditable) {
     let eventState = "";
-    const paragraphs = target.querySelectorAll("p");
+    const paragraphs = target.querySelectorAll("p, .cm-line, .kix-lineview");
     paragraphs.forEach((p, index) => {
       const text = p.textContent ?? "";
       eventState += text;

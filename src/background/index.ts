@@ -117,6 +117,10 @@ chrome.runtime.onMessage.addListener(async(msg: any, _sender: chrome.runtime.Mes
       sendResponse({...response, origin: "gemini"});
       return;
     }
+    if (url.host === "www.overleaf.com") {
+      sendResponse({...response, origin: "overleaf"});
+      return;
+    }
     sendResponse(response);
   }
   else if (msg.type === "UserEvent") {

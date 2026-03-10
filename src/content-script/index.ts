@@ -20,6 +20,7 @@ import {
 // Global variables
 let observer: MutationObserver | null = null;
 let contentEditableElement: HTMLElement | null = null;
+let editor: HTMLElement | null = null;
 
 const onMessage = (
   msg: any,
@@ -30,6 +31,15 @@ const onMessage = (
   }
   else if (msg.type === "REMOVE_CONTENT_SCRIPT") {
     deinit();
+
+    if (!!editor) {
+      editor.removeEventListener('keydown', keyDownHandler);
+      editor.removeEventListener('cut', cutHandler);
+      editor.removeEventListener('copy', copyHandler);
+      editor.removeEventListener('paste', pasteHandler);
+      editor.removeEventListener('input', inputHandler);
+      editor = null;
+    }
     removeMutationEventListener(observer);
     removeGoogleDocsEventListener();
     if (contentEditableElement) {
@@ -125,6 +135,25 @@ chrome.runtime.sendMessage({
         geminiMutationConfig,
         geminiMutationHandler()
       )
+    }
+    else if (res.origin === "overleaf") {
+      const observer = new MutationObserver((mutationList: MutationRecord[], observer: MutationObserver) => {
+        editor = document.querySelector(".cm-content[contenteditable='true']") as HTMLElement | null;
+
+        if (editor) {
+          // initialization
+          editor.addEventListener('keydown', keyDownHandler);
+          editor.addEventListener('input', inputHandler);
+          editor.addEventListener('cut', cutHandler);
+          editor.addEventListener('copy', copyHandler);
+          editor.addEventListener('paste', pasteHandler);
+
+          // stop observing (optional)
+          observer.disconnect();
+        }
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
     }
     else {
       init();
