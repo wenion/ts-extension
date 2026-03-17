@@ -15,11 +15,15 @@ import {
   pasteHandler,
   chatgptMutationHandler,
   geminiMutationHandler,
+  claudeMutationHandler,
 } from "./onEventHandlers";
 
 // Global variables
+// MutationObserver instance
 let observer: MutationObserver | null = null;
+// For Google Docs
 let contentEditableElement: HTMLElement | null = null;
+// overleaf editor
 let editor: HTMLElement | null = null;
 
 const onMessage = (
@@ -154,6 +158,20 @@ chrome.runtime.sendMessage({
       });
 
       observer.observe(document.body, { childList: true, subtree: true });
+    }
+    else if (res.origin === "claude") {
+      init();
+      const claudeMutationConfig = {
+        childList: true,
+        attributes: true,
+        subtree: true,
+        characterData: true,
+      };
+      observer = addMutationEventListener(
+        document.body,
+        claudeMutationConfig,
+        claudeMutationHandler()
+      )
     }
     else {
       init();

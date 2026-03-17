@@ -901,3 +901,24 @@ export const onGeminiMutation = (
   };
   onMutation(node, builder, sender);
 };
+
+export const onClaudeMutation = (
+  node: HTMLElement,
+  sender: (trace: UserEventTrace) => void
+) => {
+  const builder = (node: HTMLElement) => {
+    const data = {} as UserEventTrace;
+    data.eventType = "mutation";
+    data.url = window.location.href;
+    data.tag = node.tagName;
+    data.message = node.innerText;
+    data.timestamp = Date.now();
+    data.source = "Mutation";
+
+    node.matches('[data-testid="user-message"]') ? data.author = "human" :
+      node.closest('.font-claude-response') ? data.author = "AI" : data.author = "unknown";
+
+    return data;
+  };
+  onMutation(node, builder, sender);
+};

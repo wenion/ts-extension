@@ -11,7 +11,8 @@ import {
   Profile,
 } from "../shared/types";
 import { isOriginGranted, removeGrantedOrigin } from "../shared/grantedOrigins";
-import { insertTrace } from "../api/trace";
+import { insertTrace, insertTraces } from "../api/trace";
+import { TraceBuffer } from "./buffer";
 
 const sendTrace = async (trace: UserEventTrace, tabId: number, url: string) => {
   const onError = async (tabId: number, url: string, response: Response) => {
@@ -55,7 +56,26 @@ const sendTrace = async (trace: UserEventTrace, tabId: number, url: string) => {
   };
 };
 
+const traceBuffer = new TraceBuffer<UserEventTrace>(
+  async (traces) => {
+    await insertTraces(traces, token);
+  }
+);
+
 let token: string | undefined = undefined;
+let mutationInProgress: boolean = false;
+let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+function resetTimeout(duration: number) {
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+  }
+
+  timeoutId = setTimeout(() => {
+    mutationInProgress = false;
+    timeoutId = null;
+  }, duration);
+}
 
 chrome.storage.local.get("token").then(result => {
   token = result.token as string;
@@ -70,10 +90,30 @@ const handleUserEvent = async (
     return;
   }
 
-  await sendTrace(
-    { ...msg.payload, url: msg.payload.url ? msg.payload.url : _sender.tab.url },
-    _sender.tab.id,
-    _sender.tab.url
+  if (msg.payload.eventType === "mutation") {
+    // if it's the last mutation, end the allow
+    if (mutationInProgress) {
+      resetTimeout(10000);
+    }
+    else {
+      return;
+    }
+  }
+  if (
+    msg.payload.eventType === "pointerdown" ||
+    (msg.payload.eventType === "keydown" && msg.payload.key === "Enter")
+  ) {
+    if (!mutationInProgress) {
+      // allow some time for the DOM to update before capturing the mutation
+      mutationInProgress = true;
+
+      // setTimeout to cancel if no any mutation observed within the delay time
+      resetTimeout(15000);
+    }
+  }
+
+  await traceBuffer.add(
+    { ...msg.payload, url: msg.payload.url ? msg.payload.url : _sender.tab.url }
   );
 };
 
@@ -121,6 +161,10 @@ chrome.runtime.onMessage.addListener(async(msg: any, _sender: chrome.runtime.Mes
       sendResponse({...response, origin: "overleaf"});
       return;
     }
+    if (url.host === "claude.ai") {
+      sendResponse({...response, origin: "claude"});
+      return;
+    }
     sendResponse(response);
   }
   else if (msg.type === "UserEvent") {
@@ -140,6 +184,10 @@ chrome.runtime.onMessage.addListener(async(msg: any, _sender: chrome.runtime.Mes
 //   console.log("[bg] tab replaced:", addedTabId, removedTabId)
 // });
 
+chrome.tabs.onRemoved.addListener(async (tabId: number) => {
+  traceBuffer.flush();
+});
+
 const checkPermissionGranted = async (url: URL) => {
   if (!["http:", "https:"].includes(url.protocol)) {
     return false;
@@ -155,6 +203,10 @@ const checkPermissionGranted = async (url: URL) => {
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (!tab.url) return;
+
+  if (changeInfo.status === "loading") {
+    traceBuffer.flush();
+  }
 
   const hasPermission = await checkPermissionGranted(new URL(tab.url));
   if (hasPermission) {

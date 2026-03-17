@@ -11,3 +11,14 @@ export const insertTrace = async (
     token,
   });
 }
+
+export const insertTraces = async (
+  traces: UserEventTrace[],
+  token?: string,
+): Promise<{ ids: string[] } | undefined> => {
+  return fetchJson<{ ids: string[] } | undefined>("/api/v1/traces/batch", {
+    method: "POST",
+    body: traces,
+    token,
+  });
+}
