@@ -1,10 +1,12 @@
 type SendFn<T> = (items: T[]) => Promise<void>;
 
 const MAX_BUFFER = 1000;
+const MAX_RETRIES = 5;
 
 export class TraceBuffer<T> {
   private buffer: T[] = [];
   private timer: ReturnType<typeof setInterval>;
+  private retryCount = 0;
 
   constructor(
     private sendFn: SendFn<T>,
@@ -37,8 +39,19 @@ export class TraceBuffer<T> {
 
     try {
       await this.sendFn(batch);
+      this.retryCount = 0;
     } catch (err) {
       console.error("flush error:", err);
+
+      this.retryCount++;
+      if (this.retryCount >= MAX_RETRIES) {
+        console.error("Max retries reached. Clearing buffer.");
+
+        // drop everything
+        this.buffer = [];
+        this.retryCount = 0;
+        return;
+      }
 
       // put back (preserve order)
       this.buffer.unshift(...batch);
