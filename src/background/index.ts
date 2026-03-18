@@ -101,7 +101,9 @@ const handleUserEvent = async (
   }
   if (
     msg.payload.eventType === "pointerdown" ||
-    (msg.payload.eventType === "keydown" && msg.payload.key === "Enter")
+    (msg.payload.eventType === "keydown" && msg.payload.key === "Enter") ||
+    msg.payload.xpath?.startsWith('//*[@id="main-content"]') ||
+    msg.payload.xpath?.startsWith('//*[@id="prompt-textarea"]')
   ) {
     if (!mutationInProgress) {
       // allow some time for the DOM to update before capturing the mutation
