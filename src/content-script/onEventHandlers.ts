@@ -40,9 +40,9 @@ export const chatgptMutationHandler  = () => {
         const textNode = mutation.target;
         const node = textNode.parentElement;
 
-        if (!node) return;
+        if (!node) continue;
 
-        const article = node.closest('article');
+        const article = node.closest('[data-turn-id]') as HTMLElement | null;
         if (article) {
           func(article);
         }
@@ -52,13 +52,13 @@ export const chatgptMutationHandler  = () => {
         mutation.addedNodes.forEach((node) => {
           if (!(node instanceof HTMLElement)) return;
 
-          if (node.matches('article')) {
+          if (node.matches('[data-turn-id]')) {
             func(node);
           }
           else {
-            let els = node.querySelectorAll('article');
+            let els = node.querySelectorAll('[data-turn-id]');
             els.forEach((el) => {
-              func(el);
+              func(el as HTMLElement);
             });
           }
         });
