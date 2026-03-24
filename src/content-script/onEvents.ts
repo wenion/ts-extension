@@ -729,6 +729,7 @@ export const onCut = (
   func?: (trace: UserEventTrace) => void
 ): void => {
   let text = "";
+  const clipboardText = event.clipboardData?.getData("text/plain") ?? "";
 
   const target = event.target as HTMLElement | null;
 
@@ -746,11 +747,14 @@ export const onCut = (
     text = document.getSelection()?.toString() ?? "";
   }
 
+  if (text.length === 0 && clipboardText) {
+    text = clipboardText;
+  }
+
   const data = {} as UserEventTrace;
   data.source = "UserEvent";
   data.eventType = event.type;
   data.textContent = text;
-  data.eventState = text;
   data.timestamp = Date.now();
 
   if (target) {
@@ -780,7 +784,6 @@ export const onCopy = (
   data.source = "UserEvent";
   data.eventType = event.type;
   data.textContent = clipboardText;
-  data.eventState = clipboardText;
   data.timestamp = Date.now();
 
   const selection = document.getSelection();
@@ -812,7 +815,6 @@ export const onPaste = (
   data.source = "UserEvent";
   data.eventType = event.type;
   data.textContent = clipboardText;
-  data.eventState = clipboardText;
   data.timestamp = Date.now();
   data.author = "human";
 
