@@ -7,16 +7,26 @@ import {
   XHRHookConfig,
 } from "./xhrHookMessageProtocol";
 
-import type { UserEventTrace } from "../shared/types";
+import type { GoogleDocsMeta } from "../shared/types";
 
 let googleDocsMessageHandler: ((event: MessageEvent) => void) | null = null;
 
-function postMessageToContentScript(data: UserEventTrace) {
+function postMessageToContentScript(data: GoogleDocsMeta) {
   chrome.runtime.sendMessage({
-    type: "UserEvent",
+    type: "GoogleDocsMeta",
     payload: data
   });
 }
+
+type DocElement = {
+  ty: string; // "is" for insert, "ds" for delete, "mlti" for multi
+  ibi?: number; // insert position for "is"
+  s?: string; // inserted text for "is"
+  si?: number; // start position for "ds"
+  ei?: number; // end position for "ds"
+  st?: string; // for "as" type, e.g., "ignore_spellcheck"
+  mts?: Array<DocElement>; // array of operations for "mlti"
+};
 
 export const googleDocsHandler = (
 ) => {
@@ -34,88 +44,72 @@ export const googleDocsHandler = (
       if (!bundlesRaw) return;
       const bundles = JSON.parse(bundlesRaw);
 
-      try {
-        const content = bundles[0].commands[0];
-        const type = content.ty;
-
+      const parseCommands = (command: DocElement, reqId: number, index: number) => {
+        const type = command.ty;
         if (type === "is") {
-          const ibi = content.ibi;
-          const text = content.s;
-          const data: UserEventTrace = {
-            tag: "POST",
-            eventType: "keystroke",
-            elementType: "insert",
+          const ibi = command.ibi;
+          const text = command.s;
+          const data: GoogleDocsMeta = {
+            api: "save",
+            requestId: reqId,
             url: window.location.href,
-            author: "human",
-            sessionId: meta.requestId,
-            eventValue: text,
+            type: "insert",
             startPosition: ibi,
             timestamp: Date.now(),
-            source: "API",
-          }
+            content: text,
+            category: "is",
+            index: index
+          };
           postMessageToContentScript(data);
         }
         else if (type === "ds") {
-          const si = content.si;
-          const ei = content.ei;
-          const data: UserEventTrace = {
-            tag: "POST",
-            eventType: "keystroke",
-            elementType: "delete",
+          const si = command.si;
+          const ei = command.ei;
+          const data: GoogleDocsMeta = {
+            api: "save",
+            requestId: reqId,
             url: window.location.href,
-            author: "human",
-            sessionId: meta.requestId,
-            timestamp: Date.now(),
+            type: "delete",
             startPosition: si,
             endPosition: ei,
-            source: "API",
+            timestamp: Date.now(),
+            category: "ds",
+            index: index
           }
           postMessageToContentScript(data);
         }
         else if (type === "mlti") {
-          const mts = content.mts as Array<{ty: string; ibi?: number; s?: string; si?: number; ei?: number;}>;
-          mts.forEach(item => {
-            if (item.ty === "is") {
-              const ibi = item.ibi;
-              const text = item.s;
-              const data: UserEventTrace = {
-                tag: "POST",
-                eventType: "keystroke",
-                elementType: "insert",
-                url: window.location.href,
-                author: "human",
-                eventValue: text ?? "",
-                sessionId: meta.requestId,
-                timestamp: Date.now(),
-                startPosition: ibi,
-                source: "API",
-              }
-              postMessageToContentScript(data);
-            }
-            else if (item.ty === "ds") {
-              const si = item.si;
-              const ei = item.ei;
-              const data: UserEventTrace = {
-                tag: "POST",
-                eventType: "keystroke",
-                elementType: "delete",
-                url: window.location.href,
-                author: "human",
-                eventValue: "",
-                sessionId: meta.requestId,
-                timestamp: Date.now(),
-                startPosition: si,
-                endPosition: ei,
-                source: "API",
-              }
-              postMessageToContentScript(data);
-            }
-          });
+          const mts = command.mts;
+          if (mts) {
+            mts.forEach((item, idx) => parseCommands(item, reqId, idx));
+          }
         }
-        else {
-          console.log("unknown type:", type);
+        else if (type === "as" && command.st === "ignore_spellcheck") {
+          const si = command.si;
+          const ei = command.ei;
+          const data: GoogleDocsMeta = {
+            api: "save",
+            requestId: reqId,
+            url: window.location.href,
+            type: "spellcheck",
+            startPosition: si,
+            endPosition: ei,
+            timestamp: Date.now(),
+            category: "as",
+            index: index
+          }
+          postMessageToContentScript(data);
         }
-      } catch (e) {
+      }
+
+      try{
+        const commands = bundles[0].commands as Array<DocElement>;
+        const reqId = bundles[0].reqId;
+        commands.forEach((command, index) => {
+          parseCommands(command, reqId, index);
+        });
+
+      } catch(e) {
         console.log("bundles exception:", e);
       }
 
@@ -124,18 +118,16 @@ export const googleDocsHandler = (
       try {
         const body = JSON.parse(msg.body);
         const suggestionText = body[0][0];
+        const docId = body[0][8];
 
-        const data: UserEventTrace = {
-          tag: "POST",
-          eventType: "input",
-          elementType: "suggestion",
+        const data: GoogleDocsMeta = {
+          api: "assistwriting",
+          requestId: 0,
           url: window.location.href,
-          author: "human",
-          eventState: suggestionText,
-          eventValue: body.prompt ?? null,
-          sessionId: meta.requestId,
+          type: "assistwriting",
+          content: suggestionText,
           timestamp: Date.now(),
-          source: "API",
+          index: 0,
         }
         postMessageToContentScript(data);
       } catch (e) {

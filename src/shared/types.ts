@@ -177,3 +177,16 @@ export type TraceRecord = {
    */
   x_path: string | null;
 };
+
+export type GoogleDocsMeta = {
+  api: string;
+  requestId: number;
+  index: number;
+  url: string;
+  type: string;
+  startPosition?: number;
+  endPosition?: number;
+  content?: string;
+  timestamp: number;
+  category?: string;
+};

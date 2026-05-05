@@ -23,6 +23,7 @@ import {
 let observer: MutationObserver | null = null;
 // For Google Docs
 let contentEditableElement: HTMLElement | null = null;
+// let contentPanelElement: HTMLDivElement | null = null;
 // overleaf editor
 let editor: HTMLElement | null = null;
 
@@ -47,12 +48,16 @@ const onMessage = (
     removeMutationEventListener(observer);
     removeGoogleDocsEventListener();
     if (contentEditableElement) {
-      contentEditableElement.removeEventListener('keydown', keyDownHandler);
+      // contentEditableElement.removeEventListener('keydown', keyDownHandler);
       contentEditableElement.removeEventListener('cut', cutHandler);
       contentEditableElement.removeEventListener('copy', copyHandler);
       contentEditableElement.removeEventListener('paste', pasteHandler);
       contentEditableElement = null;
     }
+    // if (contentPanelElement) {
+    //   contentPanelElement.removeEventListener("pointerdown", pointerDownHandler);
+    //   contentPanelElement = null;
+    // }
     sendResponse({ ok: true, from: "content-script", at: now() });
     chrome.runtime.onMessage.removeListener(onMessage);
   }
@@ -110,12 +115,16 @@ chrome.runtime.sendMessage({
         contentEditableElement = iframe.contentDocument.querySelector('[contenteditable="true"]');
         if (contentEditableElement) {
           console.log("Google Docs contentEditable element found.");
-          contentEditableElement.addEventListener('keydown', keyDownHandler);
+          // contentEditableElement.addEventListener('keydown', keyDownHandler);
           contentEditableElement.addEventListener('copy', copyHandler);
           contentEditableElement.addEventListener('cut', cutHandler);
           contentEditableElement.addEventListener('paste', pasteHandler);
         }
       }
+      // contentPanelElement = document.querySelector(".kix-appview-editor") as HTMLDivElement | null;
+      // if (contentPanelElement) {
+      //   contentPanelElement.addEventListener("pointerdown", pointerDownHandler);
+      // }
       const googleDocsConfig = {
         methods: ["POST"],
         url: ["/save", "/assistwriting"]

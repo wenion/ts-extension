@@ -1,5 +1,6 @@
 import { fetchJson, HttpError } from "../api/fetch";
 import { now } from "../shared/util";
+import { bus } from "./bus";
 import {
   getDefaultIcon,
   getCapturingIcon,
@@ -9,10 +10,83 @@ import {
   UserEventTrace,
   TraceSource,
   Profile,
+  GoogleDocsMeta,
 } from "../shared/types";
 import { isOriginGranted, removeGrantedOrigin } from "../shared/grantedOrigins";
 import { insertTrace, insertTraces } from "../api/trace";
 import { TraceBuffer } from "./buffer";
+import {
+  onNavigate,
+  onKeyStroke,
+} from "./googleDocs";
+
+export type DocState = {
+  state: string;
+  value: string;
+  text?: string;
+  startPosition?: number;
+  endPosition?: number;
+  done: boolean;
+  timestamp: number;
+  requestId?: number;
+  url: string;
+  type: string;
+};
+
+const currentMap = new Map<string, DocState>();
+
+bus.addEventListener("GOOGLE_DOCS_EVENT", async (e: Event) => {
+  const customEvent = e as CustomEvent;
+
+  const eventType = customEvent.detail.eventType; // keystroke or navigate
+  const data = customEvent.detail.data;
+
+
+  if (data.type === "insert") {
+    for (let i= 0; i < data.letter.length; i++) {
+      const key = data.letter[i] === "\n" ? "Enter" : data.letter[i] === " " ? "Space" : data.letter[i]; //"[Enter]"
+
+      const trace : UserEventTrace = {
+        eventType: eventType,
+        elementType: data.type,
+        source: "UserEvent",
+        textContent: data.preState,
+        code: key,
+        key: key,
+        timestamp: data.lastUpdated + i,
+        author: "human",
+        startPosition: data.startPosition + i,
+        endPosition: data.startPosition + i + 1,
+        eventValue: data.letter[i],
+        eventState: data.state,
+        url: data.url,
+      }
+
+      traceBuffer.add(trace);
+    }
+  }
+  else {
+    const key = data.letter === "\n" ? "Enter" : data.letter === " " ? "Space" : data.letter; //"[Enter]"
+    const trace : UserEventTrace = {
+      eventType: eventType,
+      elementType: data.type,
+      source: "UserEvent",
+      textContent: data.preState,
+      code: key,
+      key: key,
+      timestamp: data.lastUpdated,
+      author: "human",
+      startPosition: data.startPosition,
+      endPosition: data.endPosition,
+      eventValue: data.letter,
+      eventState: data.state,
+      url: data.url,
+    }
+
+    traceBuffer.add(trace);
+
+  }
+});
 
 const sendTrace = async (trace: UserEventTrace, tabId: number, url: string) => {
   const onError = async (tabId: number, url: string, response: Response) => {
@@ -81,6 +155,25 @@ chrome.storage.local.get("token").then(result => {
   token = result.token as string;
 });
 
+function findAllMatches(str: string, sub: string): { start: number; end: number }[] {
+  const results = [];
+  let index = 0;
+
+  while (true) {
+    const start = str.indexOf(sub, index);
+    if (start === -1) break;
+
+    results.push({
+      start,
+      end: start + sub.length - 1,
+    });
+
+    index = start + 1; // allow overlap
+  }
+
+  return results;
+}
+
 const handleUserEvent = async (
   msg: {type: TraceSource, payload: UserEventTrace},
   _sender: chrome.runtime.MessageSender,
@@ -117,6 +210,534 @@ const handleUserEvent = async (
   await traceBuffer.add(
     { ...msg.payload, url: msg.payload.url ? msg.payload.url : _sender.tab.url }
   );
+
+  if (msg.payload.eventType === "keydown") {
+    if (msg.payload.eventValue === "Enter") {
+      const cache: DocState = {
+        state: msg.payload.eventState || "",
+        value: "\n",
+        text: msg.payload.textContent,
+        startPosition: msg.payload.startPosition,
+        done: true,
+        url: _sender.tab.url,
+        timestamp: Date.now(),
+        type: "Insert",
+      };
+      currentMap.set(_sender.tab.url, cache);
+
+      const data = {} as UserEventTrace;
+      data.eventType = "keystroke";
+      data.key = "Enter";
+      data.code = "Enter";
+      data.eventValue = "\n";
+      data.eventState = msg.payload.eventState;
+      data.startPosition = msg.payload.startPosition ? msg.payload.startPosition : 0;
+      data.endPosition = data.startPosition + 1;
+      data.url = _sender.tab.url;
+      data.timestamp = Date.now();
+      data.source = "UserEvent";
+      data.author = "human";
+      data.textContent = msg.payload.textContent;
+      data.tag = msg.payload.tag;
+      data.elementType = "insert";
+
+      await traceBuffer.add(data);
+    }
+    else if (msg.payload.key === "Backspace") {
+      const start = msg.payload.startPosition;
+      const length = msg.payload.eventState?.length || 0;
+      const prev = currentMap.get(_sender.tab.url);
+      const prevState = prev ? prev.state : "";
+
+      if (prevState !== "") {
+        if (prevState === msg.payload.eventState) {
+          // delete a letter
+          const value = prevState.slice(start, start! + 1);
+          const cache: DocState = {
+            state: msg.payload.eventState || "",
+            value: value,
+            text: msg.payload.textContent,
+            startPosition: start,
+            done: msg.payload.startPosition === 0 ? true : false,
+            url: _sender.tab.url,
+            timestamp: Date.now(),
+            type: "Backspace",
+          };
+          currentMap.set(_sender.tab.url, cache);
+        }
+        else {
+          const diff = prevState.length - length;
+          if (diff === 1) {
+            const value = prevState.slice(start, start! + 1);
+            if (value === "\n") {
+              const cache: DocState = {
+                state: msg.payload.eventState || "",
+                value: "\n",
+                text: msg.payload.textContent,
+                startPosition: start! + 1,
+                endPosition: start,
+                done: true,
+                url: _sender.tab.url,
+                timestamp: Date.now(),
+                type: "Backspace",
+              };
+              currentMap.set(_sender.tab.url, cache);
+              // output
+              const data = {} as UserEventTrace;
+              data.eventType = "keystroke";
+              data.key = "Enter";
+              data.code = "Enter";
+              data.eventValue = "\n";
+              data.eventState = msg.payload.eventState;
+              data.startPosition = start! + 1;
+              data.endPosition = start;
+              data.url = _sender.tab.url;
+              data.timestamp = Date.now();
+              data.source = "UserEvent";
+              data.author = "human";
+              data.textContent = msg.payload.textContent;
+              data.tag = msg.payload.tag;
+              data.elementType = "delete";
+
+              await traceBuffer.add(data);
+            }
+          }
+          else if (diff === prevState.length) {
+            // delete all text
+            const cache: DocState = {
+              state: msg.payload.eventState || "",
+              value: prevState,
+              text: msg.payload.textContent,
+              startPosition: prevState.length,
+              endPosition: 0,
+              done: true,
+              url: _sender.tab.url,
+              timestamp: Date.now(),
+              type: "Backspace",
+            };
+            currentMap.set(_sender.tab.url, cache);
+
+            const data = {} as UserEventTrace;
+            data.eventType = "keystroke";
+            data.key = prevState;
+            data.code = prevState;
+            data.eventValue = prevState;
+            data.eventState = msg.payload.eventState;
+            data.startPosition = prevState.length;
+            data.endPosition = 0;
+            data.url = _sender.tab.url;
+            data.timestamp = Date.now();
+            data.source = "UserEvent";
+            data.author = "human";
+            data.textContent = msg.payload.textContent;
+            data.tag = msg.payload.tag;
+            data.elementType = "delete";
+
+            await traceBuffer.add(data);
+          }
+          else {
+            // delete a part of the text
+            let start = msg.payload.startPosition || 0;
+            const result = findAllMatches(prevState, msg.payload.eventState || "");
+            const match = result.find(m => m.start === start);
+            if (match) {
+              start = match.start;
+            }
+            const cache: DocState = {
+              state: msg.payload.eventState || "",
+              value: prevState.slice(start, diff + start),
+              text: msg.payload.textContent,
+              startPosition: start,
+              endPosition: start + diff,
+              done: true,
+              url: _sender.tab.url,
+              timestamp: Date.now(),
+              type: "Backspace",
+            };
+            currentMap.set(_sender.tab.url, cache);
+
+            const data = {} as UserEventTrace;
+            data.eventType = "keystroke";
+            data.key = prevState.slice(start, diff + start);
+            data.code = prevState.slice(start, diff + start);
+            data.eventValue = prevState.slice(start, diff + start);
+            data.eventState = msg.payload.eventState;
+            data.startPosition = start;
+            data.endPosition = start + diff;
+            data.url = _sender.tab.url;
+            data.timestamp = Date.now();
+            data.source = "UserEvent";
+            data.author = "human";
+            data.textContent = msg.payload.textContent;
+            data.tag = msg.payload.tag;
+            data.elementType = "delete";
+
+            await traceBuffer.add(data);
+          }
+        }
+      }
+      else {
+        // empty delete, we can ignore this case
+        // but we still need to update the cache
+        if (msg.payload.eventState !== "") {
+          const cache: DocState = {
+            state: msg.payload.eventState || "",
+            value: "",
+            text: msg.payload.textContent,
+            startPosition: msg.payload.startPosition,
+            done: false,
+            url: _sender.tab.url,
+            timestamp: Date.now(),
+            type: "Backspace",
+          };
+          currentMap.set(_sender.tab.url, cache);
+        }
+      }
+    }
+    else if (msg.payload.key === "Delete") {
+      const start = msg.payload.startPosition;
+
+      const prev = currentMap.get(_sender.tab.url);
+      const prevState = prev ? prev.state : "";
+      if (prevState !== "") {
+        if (prevState === msg.payload.eventState) {
+          // will follow with input event
+          const value = prevState.slice(start, start! + 1);
+          const cache: DocState = {
+            state: msg.payload.eventState || "",
+            value: value,
+            text: msg.payload.textContent,
+            startPosition: start,
+            done: false,
+            url: _sender.tab.url,
+            timestamp: Date.now(),
+            type: "Delete",
+          };
+          currentMap.set(_sender.tab.url, cache);
+        }
+        else {
+          const diff = prevState.length - msg.payload.eventState!.length;
+          if (diff === 1) {
+            const value = prevState.slice(start, start! + 1);
+            if (value === "\n") {
+              const cache: DocState = {
+                state: msg.payload.eventState || "",
+                value: "\n",
+                text: msg.payload.textContent,
+                startPosition: start! + 1,
+                endPosition: start,
+                done: true,
+                url: _sender.tab.url,
+                timestamp: Date.now(),
+                type: "Delete",
+              };
+              currentMap.set(_sender.tab.url, cache);
+              // output
+              const data = {} as UserEventTrace;
+              data.eventType = "keystroke";
+              data.key = "Enter";
+              data.code = "Enter";
+              data.eventValue = "\n";
+              data.eventState = msg.payload.eventState;
+              data.startPosition = start! + 1;
+              data.endPosition = start;
+              data.url = _sender.tab.url;
+              data.timestamp = Date.now();
+              data.source = "UserEvent";
+              data.author = "human";
+              data.textContent = msg.payload.textContent;
+              data.tag = msg.payload.tag;
+              data.elementType = "delete";
+
+              await traceBuffer.add(data);
+            }
+          }
+          else if (diff === prevState.length) {
+            // delete all text
+            const cache: DocState = {
+              state: msg.payload.eventState || "",
+              value: prevState,
+              text: msg.payload.textContent,
+              startPosition: prevState.length,
+              endPosition: 0,
+              done: true,
+              url: _sender.tab.url,
+              timestamp: Date.now(),
+              type: "Delete",
+            };
+            currentMap.set(_sender.tab.url, cache);
+
+            const data = {} as UserEventTrace;
+            data.eventType = "keystroke";
+            data.key = prevState;
+            data.code = prevState;
+            data.eventValue = prevState;
+            data.eventState = msg.payload.eventState;
+            data.startPosition = prevState.length;
+            data.endPosition = 0;
+            data.url = _sender.tab.url;
+            data.timestamp = Date.now();
+            data.source = "UserEvent";
+            data.author = "human";
+            data.textContent = msg.payload.textContent;
+            data.tag = msg.payload.tag;
+            data.elementType = "delete";
+
+            await traceBuffer.add(data);
+          }
+          else {
+            let start = msg.payload.startPosition || 0;
+            const result = findAllMatches(prevState, msg.payload.eventState || "");
+            const match = result.find(m => m.start === start);
+            if (match) {
+              start = match.start;
+            }
+            const cache: DocState = {
+              state: msg.payload.eventState || "",
+              value: prevState.slice(start, diff + start),
+              text: msg.payload.textContent,
+              startPosition: start,
+              endPosition: start + diff,
+              done: true,
+              url: _sender.tab.url,
+              timestamp: Date.now(),
+              type: "Delete",
+            };
+            currentMap.set(_sender.tab.url, cache);
+
+            const data = {} as UserEventTrace;
+            data.eventType = "keystroke";
+            data.key = prevState.slice(start, diff + start);
+            data.code = prevState.slice(start, diff + start);
+            data.eventValue = prevState.slice(start, diff + start);
+            data.eventState = msg.payload.eventState;
+            data.startPosition = start;
+            data.endPosition = start + diff;
+            data.url = _sender.tab.url;
+            data.timestamp = Date.now();
+            data.source = "UserEvent";
+            data.author = "human";
+            data.textContent = msg.payload.textContent;
+            data.tag = msg.payload.tag;
+            data.elementType = "delete";
+
+            await traceBuffer.add(data);
+          }
+        }
+      }
+      else {
+        // TODO try to get the prev state in initialization or navigation event
+        if (msg.payload.eventState !== "") {
+          const cache: DocState = {
+            state: msg.payload.eventState || "",
+            value: "",
+            text: msg.payload.textContent,
+            startPosition: msg.payload.startPosition,
+            done: false,
+            url: _sender.tab.url,
+            timestamp: Date.now(),
+            type: "Delete",
+          };
+          currentMap.set(_sender.tab.url, cache);
+        }
+      }
+    }
+    else if (msg.payload.key === "Undo" || msg.payload.key === "Redo") {
+      const cache: DocState = {
+        state: msg.payload.eventState || "",
+        value: "",
+        text: msg.payload.textContent,
+        startPosition: msg.payload.startPosition,
+        done: true,
+        url: _sender.tab.url,
+        timestamp: Date.now(),
+        type: "Insert",
+      };
+      currentMap.set(_sender.tab.url, cache);
+
+      const data = {} as UserEventTrace;
+      data.eventType = "keystroke";
+      data.key = msg.payload.key;
+      data.code =msg.payload.key;
+      data.eventValue = "";
+      data.eventState = msg.payload.eventState;
+      data.startPosition = msg.payload.startPosition ? msg.payload.startPosition - 1 : 0;
+      data.endPosition = data.startPosition + 1;
+      data.url = _sender.tab.url;
+      data.timestamp = Date.now();
+      data.source = "UserEvent";
+      data.author = "human";
+      data.textContent = msg.payload.textContent;
+      data.tag = msg.payload.tag;
+      data.elementType = "insert";
+
+      await traceBuffer.add(data);
+    }
+    else if (msg.payload.eventValue && msg.payload.eventValue.length === 1) {
+      // follow with the input event
+      const cache: DocState = {
+        state: msg.payload.eventState || "",
+        value: msg.payload.eventValue,
+        text: msg.payload.textContent,
+        startPosition: msg.payload.startPosition,
+        done: false,
+        url: _sender.tab.url,
+        requestId: 0,
+        timestamp: Date.now(),
+        type: "Insert",
+      };
+      currentMap.set(_sender.tab.url, cache);
+    }
+    else {
+      const cache: DocState = {
+        state: msg.payload.eventState || "",
+        value: "",
+        text: msg.payload.textContent,
+        startPosition: msg.payload.startPosition,
+        done: true,
+        url: _sender.tab.url,
+        timestamp: Date.now(),
+        type: "Insert",
+      };
+      currentMap.set(_sender.tab.url, cache);
+    }
+  }
+  else if (msg.payload.eventType === "input") {
+    const pre = currentMap.get(_sender.tab.url);
+    if (pre && !pre.done) {
+      let value = "";
+      let start = pre.startPosition;
+      let end = pre.endPosition;
+      let type = pre.type; // "insert" or "delete"
+      let direction = "forward"; // or "backward"
+      if (pre.type === "Backspace") {
+        direction = "backward";
+        start = pre.startPosition! - 1;
+        end = pre.startPosition;
+        value = pre.state.slice(start, end);
+        type = "delete";
+      }
+      else if (pre.type === "Delete") {
+        start = pre.startPosition;
+        end = pre.startPosition! + 1;
+        value = pre.state.slice(start, end);
+        type = "delete";
+      }
+      else if (pre.type === "Insert") {
+        // insert letter
+        // or maybe replacement
+        if (pre.state.length >= msg.payload.eventState!.length) {
+          type = "delete";
+          const diff = pre.state.length - msg.payload.eventState!.length;
+          const remove = pre.state.slice(pre.startPosition, pre.startPosition! + diff + 1);
+          const remain = pre.state.slice(0, pre.startPosition) + pre.state.slice(pre.startPosition! + diff + 1);
+
+          const data = {} as UserEventTrace;
+          data.eventType = "keystroke";
+          data.key = remove;
+          data.code = remove;
+          data.eventValue = remove;
+          data.eventState = remain;
+          data.startPosition = pre.startPosition;
+          data.endPosition = pre.startPosition! + diff + 1;
+          data.url = _sender.tab.url;
+          data.timestamp = Date.now();
+          data.source = "UserEvent";
+          data.author = "human";
+          data.textContent = pre.text;
+          data.tag = msg.payload.tag;
+          data.elementType = type;
+
+          await traceBuffer.add(data);
+        }
+
+        start = pre.startPosition;
+        end = start! + 1;
+        value = pre.value;
+        type = "insert";
+      }
+
+      // add keystroke event
+      const data = {} as UserEventTrace;
+      data.eventType = "keystroke";
+      data.eventState = msg.payload.eventState;
+      data.startPosition = start;
+      data.key = value;
+      data.code = value;
+      data.eventValue = value;
+      data.endPosition = end;
+      data.elementType = type;
+      data.url = _sender.tab.url;
+      data.timestamp = Date.now();
+      data.source = "UserEvent";
+      data.author = "human";
+      data.textContent = pre.text;
+      data.tag = msg.payload.tag;
+      data.direction = direction;
+
+      await traceBuffer.add(data);
+      pre.state = msg.payload.eventState || "";
+      pre.done = true;
+      currentMap.set(_sender.tab.url, pre);
+    }
+  }
+  else if (msg.payload.eventType === "paste") {
+    if (msg.payload.eventState) {
+      const cache: DocState = {
+        state: msg.payload.eventState,
+        value: "\n",
+        text: msg.payload.textContent,
+        startPosition: msg.payload.startPosition,
+        done: true,
+        url: _sender.tab.url,
+        timestamp: Date.now(),
+        type: "Insert",
+      };
+      currentMap.set(_sender.tab.url, cache);
+    }
+  }
+  else if (msg.payload.eventType === "cut") {
+    if (msg.payload.eventState) {
+      const cache: DocState = {
+        state: msg.payload.eventState,
+        value: msg.payload.eventValue ?? "",
+        text: msg.payload.textContent,
+        startPosition: msg.payload.startPosition,
+        done: true,
+        url: _sender.tab.url,
+        timestamp: Date.now(),
+        type: "Delete",
+      };
+      currentMap.set(_sender.tab.url, cache);
+    }
+  }
+  // else if (msg.payload.eventType === "pointerdown") {
+  // }
+  else {
+    const pre = currentMap.get(_sender.tab.url);
+    if (pre && !pre.done) {
+      // add keystroke event
+      const data = {} as UserEventTrace;
+      data.eventType = "keystroke";
+      data.eventState = pre.state;
+      data.startPosition = pre.startPosition;
+      data.key = pre.value;
+      data.code = pre.value;
+      data.eventValue = pre.value;
+      data.endPosition = pre.endPosition;
+      data.elementType = pre.type === "Insert" ? "insert" : "delete";
+      data.url = _sender.tab.url;
+      data.timestamp = Date.now();
+      data.source = "UserEvent";
+      data.author = "human";
+      data.textContent = pre.text;
+      data.tag = msg.payload.tag;
+
+      await traceBuffer.add(data);
+      pre.done = true;
+      currentMap.set(_sender.tab.url, pre);
+    }
+  }
 };
 
 const handleNavigationEvent = async (
@@ -130,6 +751,16 @@ const handleNavigationEvent = async (
     timeStamp: Date.now(),
     source: "UserEvent",
   } as UserEventTrace;
+  onNavigate(url);
+
+  currentMap.set(url, {
+    state: "",
+    value: "",
+    done: true,
+    timestamp: Date.now(),
+    type: "navigate",
+    url: url,
+  });
 
   await sendTrace(userTrace, tabId, url);
 };
@@ -171,6 +802,9 @@ chrome.runtime.onMessage.addListener(async(msg: any, _sender: chrome.runtime.Mes
   }
   else if (msg.type === "UserEvent") {
     handleUserEvent(msg as {type: TraceSource, payload: UserEventTrace}, _sender, sendResponse);
+  }
+  else if (msg.type === "GoogleDocsMeta") {
+    onKeyStroke(msg.payload as GoogleDocsMeta);
   }
   else {
     console.log("Unknown message type in content-script:", msg);

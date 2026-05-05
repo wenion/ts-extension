@@ -460,19 +460,27 @@ function getCaretInfo(target: HTMLElement, key?: string): CaretInfo | null {
 
     if (!currentParagraph) return null;
 
-    const paragraphIndex = paragraphs.indexOf(currentParagraph);
+    let paragraphIndex = paragraphs.indexOf(currentParagraph); // paragraphIndex is 0-based index
+
+    if (key === "Enter") {
+      // DOM structure changes
+      paragraphIndex = paragraphIndex - 1;
+    }
 
     let absolutePosition = 0;
 
     for (let i = 0; i < paragraphIndex; i++) {
       absolutePosition += (paragraphs[i].textContent ?? "").length;
       if ((paragraphs[i + 1].textContent ?? "").length > 0) {
+        // next paragraph has text, so add 1 for the newline
         absolutePosition += 1;
       }
       else if ((paragraphs[i + 1].textContent ?? "").length === 0 && key !== "Enter") {
+        // next paragraph is empty, but user didn't just press Enter, so add 1 for the newline
         absolutePosition += 1;
       }
       else if ((paragraphs[i + 1].textContent ?? "").length === 0 && paragraphs[i + 2]?.textContent !== undefined) {
+        // next paragraph is empty, but there is a next next paragraph, so add 1 for the newline
         absolutePosition += 1;
       }
     }
@@ -566,6 +574,16 @@ export const onKeyDown = (
 
   if (!isNativeInput && !isInContentEditable) return;
 
+  const isUndo =
+    (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z";
+
+  const isRedo =
+    (event.ctrlKey || event.metaKey) &&
+    (
+      (event.shiftKey && event.key.toLowerCase() === "z") || // Mac / some apps
+      event.key.toLowerCase() === "y" // Windows redo
+    );
+
   const MODIFIER_KEYS = new Set([
     "Shift",
     "Control",
@@ -574,11 +592,16 @@ export const onKeyDown = (
     "CapsLock"
   ]);
 
+  const isModifierOnly = MODIFIER_KEYS.has(event.key);
+
+  // ignore modifier-only presses (Shift, Ctrl, etc.)
+  if (isModifierOnly) return;
+
+  // ignore most shortcuts EXCEPT undo/redo
   if (
-    event.ctrlKey ||
-    event.metaKey ||
-    event.altKey ||
-    MODIFIER_KEYS.has(event.key)
+    (event.ctrlKey || event.metaKey || event.altKey) &&
+    !isUndo &&
+    !isRedo
   ) {
     return;
   }
@@ -598,6 +621,10 @@ export const onKeyDown = (
 
   data.code = event.code;
   data.key = event.key;
+  if (isUndo || isRedo) {
+    data.key = isUndo ? "Undo" : "Redo";
+    data.code = data.key;
+  }
   data.timestamp = Date.now();
 
   data.author = "human";
@@ -619,11 +646,6 @@ export const onKeyDown = (
         const text = p.textContent ?? "";
         eventState += text;
 
-        // if (index === paragraphs.length - 2 && event.key === "Enter") {
-        // }
-        // else if (index !== paragraphs.length - 1) {
-        //   eventState += "\n";
-        // }
         if (index !== paragraphs.length - 1) {
           eventState += "\n";
         }
@@ -728,47 +750,54 @@ export const onCut = (
   event: ClipboardEvent,
   func?: (trace: UserEventTrace) => void
 ): void => {
-  let text = "";
   const clipboardText = event.clipboardData?.getData("text/plain") ?? "";
 
   const target = event.target as HTMLElement | null;
+
+  const data = {} as UserEventTrace;
+  data.source = "UserEvent";
+  data.eventType = event.type;
+  data.timestamp = Date.now();
+  data.author = "human";
 
   // Case 1: input / textarea
   if (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement
   ) {
+    data.originValue = target.value; // the original text content before cutting
+
     const start = target.selectionStart ?? 0;
     const end = target.selectionEnd ?? 0;
-    text = target.value.slice(start, end);
+    let text = target.value.slice(start, end);
+    if (text.length !== 0) {
+      data.eventValue = text;
+      data.startPosition = start;
+      data.endPosition = end;
+    }
+    data.eventState = target.value.slice(0, start) + target.value.slice(end); // the text content after cutting
   }
   // Case 2: contenteditable or normal DOM selection
-  else {
-    text = document.getSelection()?.toString() ?? "";
-  }
+  else if (target instanceof HTMLElement) {
+    let eventState = "";
+    const editable = target.closest('[contenteditable="true"]');
+    if (editable) {
+      const paragraphs = editable.querySelectorAll("p, .cm-line, .kix-lineview");
 
-  if (text.length === 0 && clipboardText) {
-    text = clipboardText;
-  }
+      paragraphs.forEach((p, index) => {
+        const text = p.textContent ?? "";
+        eventState += text;
 
-  const data = {} as UserEventTrace;
-  data.source = "UserEvent";
-  data.eventType = event.type;
-  data.textContent = text;
-  data.timestamp = Date.now();
-
-  if (target) {
-    data.tag = target.tagName;
-
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      // data.innerText = target.value;
-      data.name = target.name ?? "";
-      data.placeholder = target.placeholder ?? "";
-    } else {
-      // data.innerText = target.innerText ?? "";
-      data.name = "";
-      data.placeholder = "";
+        if (index !== paragraphs.length - 1) {
+          eventState += "\n";
+        }
+      });
+      data.eventState = eventState; // the text content after cutting
     }
+  }
+
+  if (!data.eventValue || data.eventValue.length === 0 && clipboardText) {
+    data.eventValue = clipboardText;
   }
 
   func?.(data);
@@ -814,6 +843,7 @@ export const onPaste = (
   const data = {} as UserEventTrace;
   data.source = "UserEvent";
   data.eventType = event.type;
+  data.eventValue = clipboardText;
   data.textContent = clipboardText;
   data.timestamp = Date.now();
   data.author = "human";
@@ -828,9 +858,24 @@ export const onPaste = (
       data.startPosition = target.selectionStart ?? undefined;
       data.originValue = target.value;
       data.valueType = typeof target.value;
+      data.eventState = target.value;
     }
     else {
-      data.originValue = target.textContent ?? "";
+      let eventState = "";
+      const editable = target.closest('[contenteditable="true"]');
+      if (editable) {
+        const paragraphs = editable.querySelectorAll("p, .cm-line, .kix-lineview");
+
+        paragraphs.forEach((p, index) => {
+          const text = p.textContent ?? "";
+          eventState += text;
+
+          if (index !== paragraphs.length - 1) {
+            eventState += "\n";
+          }
+        });
+        data.eventState = eventState;
+      }
     }
   }
 
