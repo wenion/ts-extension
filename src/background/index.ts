@@ -137,7 +137,7 @@ const traceBuffer = new TraceBuffer<UserEventTrace>(
 );
 
 let token: string | undefined = undefined;
-let mutationInProgress: boolean = false;
+let currentMutationUrl: string | null = null;
 let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
 function resetTimeout(duration: number) {
@@ -146,7 +146,7 @@ function resetTimeout(duration: number) {
   }
 
   timeoutId = setTimeout(() => {
-    mutationInProgress = false;
+    currentMutationUrl = null;
     timeoutId = null;
   }, duration);
 }
@@ -184,8 +184,8 @@ const handleUserEvent = async (
   }
 
   if (msg.payload.eventType === "mutation") {
-    // if it's the last mutation, end the allow
-    if (mutationInProgress) {
+    if (currentMutationUrl === msg.payload.url || currentMutationUrl === "https://chatgpt.com/") {
+      // if in the mutation window, extend the mutation window and receive it
       resetTimeout(10000);
     }
     else {
@@ -198,9 +198,9 @@ const handleUserEvent = async (
     msg.payload.xpath?.startsWith('//*[@id="main-content"]') ||
     msg.payload.xpath?.startsWith('//*[@id="prompt-textarea"]')
   ) {
-    if (!mutationInProgress) {
-      // allow some time for the DOM to update before capturing the mutation
-      mutationInProgress = true;
+    if (currentMutationUrl === null) {
+      // Start to capture mutations
+      currentMutationUrl = _sender.tab.url;
 
       // setTimeout to cancel if no any mutation observed within the delay time
       resetTimeout(15000);
