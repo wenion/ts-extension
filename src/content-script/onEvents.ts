@@ -920,29 +920,27 @@ export const onGeminiMutation = (
     data.eventType = "mutation";
     data.url = window.location.href;
     data.tag = node.tagName;
-    data.message = node.innerText;
+    data.message = node.innerText; // don't need to concatenate
     data.timestamp = Date.now();
     data.source = "Mutation";
 
     if (data.tag === "USER-QUERY") {
       data.author = "human";
-      const child = document.querySelector('div[id*="user-query-content"]');
-      data.sessionId = child ? child.getAttribute("data-ved") || child.getAttribute("id") || data.timestamp.toString() :
+      const parent = node.closest('div[class*="conversation-container"]'); //The first <div> element whose class attribute contains the substring "conversation-container"
+      data.sessionId = parent ? parent.getAttribute("id") || data.timestamp.toString() :
         data.timestamp.toString();
 
-      const parent = node.parentElement;
-      data.name = parent ? parent.getAttribute("id") || "" : "";
+      const child = node.querySelector('[class*="query-content"]');
+      data.name = child ? child.getAttribute("id") || "" : "";
 
     } else if (data.tag === "MODEL-RESPONSE") {
       data.author = "AI";
-      const child = document.querySelector('response-container[jslog]');
-      if (child) {
-        data.sessionId = child.getAttribute("data-ved") || data.timestamp.toString();
-        if (child.hasAttribute("jslog")) {
-          const jslog = child.getAttribute("jslog");
-          data.name = jslog? jslog.match(/r_[a-zA-Z0-9]+/)?.[0] || jslog.match(/c_[a-zA-Z0-9]+/)?.[0] || "" : "";
-        }
-      }
+      const parent = node.closest('div[class*="conversation-container"]'); //The first <div> element whose class attribute contains the substring "conversation-container"
+      data.sessionId = parent ? parent.getAttribute("id") || data.timestamp.toString() :
+        data.timestamp.toString();
+
+      const child = node.querySelector('message-content');
+      data.name = child ? child.getAttribute("id") || "" : "";
     }
     return data;
   };

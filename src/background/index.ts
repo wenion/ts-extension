@@ -200,9 +200,13 @@ const handleUserEvent = async (
   }
 
   if (msg.payload.eventType === "mutation") {
-    if (currentMutationUrl === msg.payload.url || currentMutationUrl === "https://chatgpt.com/") {
+    if (
+      currentMutationUrl === msg.payload.url ||
+      currentMutationUrl === "https://chatgpt.com/" ||
+      currentMutationUrl === "https://gemini.google.com/app"
+    ) {
       // if in the mutation window, extend the mutation window and receive it
-      resetTimeout(10000);
+      resetTimeout(15000);
     }
     else {
       return;
@@ -210,17 +214,13 @@ const handleUserEvent = async (
   }
   if (
     msg.payload.eventType === "pointerdown" ||
-    (msg.payload.eventType === "keydown" && msg.payload.key === "Enter") ||
-    msg.payload.xpath?.startsWith('//*[@id="main-content"]') ||
-    msg.payload.xpath?.startsWith('//*[@id="prompt-textarea"]')
+    (msg.payload.eventType === "keydown" && msg.payload.key === "Enter")
   ) {
-    if (currentMutationUrl === null) {
-      // Start to capture mutations
-      currentMutationUrl = _sender.tab.url;
+    // Start to capture mutations
+    currentMutationUrl = _sender.tab.url;
 
-      // setTimeout to cancel if no any mutation observed within the delay time
-      resetTimeout(15000);
-    }
+    // setTimeout to cancel if no any mutation observed within the delay time
+    resetTimeout(15000);
   }
 
   await traceBuffer.add(
