@@ -33,13 +33,27 @@ export type DocState = {
   type: string;
 };
 
+type GoogleDocState = {
+  preState?: string;
+  state: string;
+  letter: string;
+  startPosition: number;
+  endPosition: number;
+  piece?: string;
+  lastUpdated: number; // timestamp (e.g., Date.now())
+  requestId: number;
+  index: number;
+  url: string;
+  type: string;
+};
+
 const currentMap = new Map<string, DocState>();
 
 bus.addEventListener("GOOGLE_DOCS_EVENT", async (e: Event) => {
   const customEvent = e as CustomEvent;
 
   const eventType = customEvent.detail.eventType; // keystroke or navigate
-  const data = customEvent.detail.data;
+  const data = customEvent.detail.data as GoogleDocState;
 
 
   if (data.type === "insert") {
@@ -58,8 +72,9 @@ bus.addEventListener("GOOGLE_DOCS_EVENT", async (e: Event) => {
         startPosition: data.startPosition + i,
         endPosition: data.startPosition + i + 1,
         eventValue: data.letter[i],
-        eventState: data.state,
+        eventState: data.state.slice(0, data.startPosition + i) + data.letter[i] + data.state.slice(data.endPosition),
         url: data.url,
+        eventId: data.requestId + "_"+ data.index,
       }
 
       traceBuffer.add(trace);
@@ -81,6 +96,7 @@ bus.addEventListener("GOOGLE_DOCS_EVENT", async (e: Event) => {
       eventValue: data.letter,
       eventState: data.state,
       url: data.url,
+      eventId: data.requestId + "_"+ data.index,
     }
 
     traceBuffer.add(trace);
