@@ -12,6 +12,7 @@ type DocState = {
   lastUpdated: number; // timestamp (e.g., Date.now())
   requestId: number;
   index: number;
+  acc: number;
   url: string;
   type: string;
 };
@@ -119,6 +120,7 @@ export async function onNavigate(url: string) {
     lastUpdated: Date.now(),
     requestId: 0,
     index: 0,
+    acc: 0,
     type: "initial",
     url,
   }
@@ -144,9 +146,10 @@ export async function onKeyStroke(data: GoogleDocsMeta) {
         const updated: DocState = {
           preState: current.preState,
           state: state,
-          lastUpdated: data.timestamp,
+          lastUpdated: data.timestamp + data.acc,
           requestId: data.requestId,
           index: data.index,
+          acc: data.acc,
           letter: piece,
           startPosition: data.startPosition! - 1,
           endPosition: data.startPosition! - 1 + piece.length,
@@ -159,9 +162,10 @@ export async function onKeyStroke(data: GoogleDocsMeta) {
         const updated: DocState = {
           preState: current.preState,
           state: current.state.slice(0, data.startPosition! - 1) + piece + current.state.slice(data.startPosition! - 1),
-          lastUpdated: data.timestamp,
+          lastUpdated: data.timestamp + data.acc,
           requestId: data.requestId,
           index: data.index,
+          acc: data.acc,
           letter: piece,
           startPosition: data.startPosition! - 1,
           endPosition: data.startPosition! - 1 + (piece ? piece.length : 0),
@@ -175,9 +179,10 @@ export async function onKeyStroke(data: GoogleDocsMeta) {
       const updated: DocState = {
         preState: current.preState,
         state: current.state.slice(0, data.startPosition! - 1) + current.state.slice(data.endPosition),
-        lastUpdated: data.timestamp,
+        lastUpdated: data.timestamp + data.acc,
         requestId: data.requestId,
         index: data.index,
+        acc: data.acc,
         letter: current.state.slice(data.startPosition! - 1, data.endPosition),
         startPosition: data.startPosition! - 1,
         endPosition: data.endPosition,
@@ -191,9 +196,10 @@ export async function onKeyStroke(data: GoogleDocsMeta) {
         preState: current.preState,
         state: current.state,
         letter: current.state.slice(data.startPosition! - 1, data.endPosition),
-        lastUpdated: data.timestamp,
+        lastUpdated: data.timestamp + data.acc,
         requestId: data.requestId,
         index: data.index,
+        acc: data.acc,
         startPosition: data.startPosition! - 1,
         endPosition: data.endPosition,
         type: "spellcheck",

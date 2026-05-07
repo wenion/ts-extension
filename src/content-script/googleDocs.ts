@@ -44,7 +44,17 @@ export const googleDocsHandler = (
       if (!bundlesRaw) return;
       const bundles = JSON.parse(bundlesRaw);
 
-      const parseCommands = (command: DocElement, reqId: number, index: number) => {
+      /**
+       * buundles is an array of operations, each with a reqId and an array of commands
+       * * reqId is the unique identifier of bundle
+       * * index is the order of command in bundle
+       * * acc is the accumulated character count of previous commands in the same bundle
+       * one delete is counted as 1, one insert is counted as the length of inserted text
+       * multi is counted as the sum of its sub commands
+       * parseCommands return the sum of considerable events
+       * some cases the commands have same timestamp, acc will be added to timestamp to ensure the order of events
+      */
+      const parseCommands = (command: DocElement, reqId: number, index: number, acc: number) => {
         const type = command.ty;
         if (type === "is") {
           const ibi = command.ibi;
@@ -58,9 +68,11 @@ export const googleDocsHandler = (
             timestamp: Date.now(),
             content: text,
             category: "is",
-            index: index
+            index: index,
+            acc: acc
           };
           postMessageToContentScript(data);
+          return text ? text.length : 0;
         }
         else if (type === "ds") {
           const si = command.si;
@@ -74,15 +86,19 @@ export const googleDocsHandler = (
             endPosition: ei,
             timestamp: Date.now(),
             category: "ds",
-            index: index
+            index: index,
+            acc: acc
           }
           postMessageToContentScript(data);
+          return 1;
         }
         else if (type === "mlti") {
           const mts = command.mts;
+          let multiAcc = acc;
           if (mts) {
-            mts.forEach((item, idx) => parseCommands(item, reqId, idx));
+            mts.forEach((item) => multiAcc += parseCommands(item, reqId, index, multiAcc));
           }
+          return multiAcc;
         }
         else if (type === "as" && command.st === "ignore_spellcheck") {
           const si = command.si;
@@ -96,17 +112,21 @@ export const googleDocsHandler = (
             endPosition: ei,
             timestamp: Date.now(),
             category: "as",
-            index: index
+            index: index,
+            acc: acc
           }
           postMessageToContentScript(data);
+          return ei && si ? ei - si : 0;
         }
+        return 0;
       }
 
       try{
         const commands = bundles[0].commands as Array<DocElement>;
         const reqId = bundles[0].reqId;
+        let acc = 0;
         commands.forEach((command, index) => {
-          parseCommands(command, reqId, index);
+          acc += parseCommands(command, reqId, index, acc);
         });
 
       } catch(e) {
@@ -128,6 +148,7 @@ export const googleDocsHandler = (
           content: suggestionText,
           timestamp: Date.now(),
           index: 0,
+          acc: 0,
         }
         postMessageToContentScript(data);
       } catch (e) {

@@ -43,6 +43,7 @@ type GoogleDocState = {
   lastUpdated: number; // timestamp (e.g., Date.now())
   requestId: number;
   index: number;
+  acc: number;
   url: string;
   type: string;
 };
@@ -74,13 +75,13 @@ bus.addEventListener("GOOGLE_DOCS_EVENT", async (e: Event) => {
         eventValue: data.letter[i],
         eventState: data.state.slice(0, data.startPosition + i) + data.letter[i] + data.state.slice(data.endPosition),
         url: data.url,
-        eventId: data.requestId + "_"+ data.index,
+        eventId: data.requestId + "_"+ data.index + "_" + (data.acc + i),
       }
 
       traceBuffer.add(trace);
     }
   }
-  else {
+  else if (data.type === "delete") {
     const key = data.letter === "\n" ? "Enter" : data.letter === " " ? "Space" : data.letter; //"[Enter]"
     const trace : UserEventTrace = {
       eventType: eventType,
@@ -96,7 +97,28 @@ bus.addEventListener("GOOGLE_DOCS_EVENT", async (e: Event) => {
       eventValue: data.letter,
       eventState: data.state,
       url: data.url,
-      eventId: data.requestId + "_"+ data.index,
+      eventId: data.requestId + "_"+ data.index + "_" + data.acc,
+    }
+
+    traceBuffer.add(trace);
+  }
+  else if (data.type === "spellcheck") {
+    const key = data.letter === "\n" ? "Enter" : data.letter === " " ? "Space" : data.letter; //"[Enter]"
+    const trace : UserEventTrace = {
+      eventType: eventType,
+      elementType: data.type,
+      source: "UserEvent",
+      textContent: data.preState,
+      code: key,
+      key: key,
+      timestamp: data.lastUpdated + data.letter.length,
+      author: "human",
+      startPosition: data.startPosition,
+      endPosition: data.endPosition,
+      eventValue: data.letter,
+      eventState: data.state,
+      url: data.url,
+      eventId: data.requestId + "_"+ data.index + "_" + data.acc,
     }
 
     traceBuffer.add(trace);

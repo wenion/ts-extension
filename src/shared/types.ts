@@ -182,6 +182,7 @@ export type GoogleDocsMeta = {
   api: string;
   requestId: number;
   index: number;
+  acc: number; // accumulated character count of previous commands in the same bundle
   url: string;
   type: string;
   startPosition?: number;
