@@ -153,18 +153,23 @@ const traceBuffer = new TraceBuffer<UserEventTrace>(
 );
 
 let token: string | undefined = undefined;
+let enableMutation = false;
 let currentMutationUrl: string | null = null;
 let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-function resetTimeout(duration: number) {
+function resetTimeout(duration?: number) {
   if (timeoutId) {
     clearTimeout(timeoutId);
+    timeoutId = null;
   }
 
-  timeoutId = setTimeout(() => {
-    currentMutationUrl = null;
-    timeoutId = null;
-  }, duration);
+  if (duration !== undefined) {
+    timeoutId = setTimeout(() => {
+      currentMutationUrl = null;
+      enableMutation = false;
+      timeoutId = null;
+    }, duration);
+  }
 }
 
 chrome.storage.local.get("token").then(result => {
@@ -201,24 +206,36 @@ const handleUserEvent = async (
 
   if (msg.payload.eventType === "mutation") {
     if (
-      currentMutationUrl === msg.payload.url ||
-      currentMutationUrl === "https://chatgpt.com/" ||
-      currentMutationUrl === "https://gemini.google.com/app"
+      enableMutation &&
+      (
+        currentMutationUrl === msg.payload.url ||
+        currentMutationUrl === "https://chatgpt.com/" ||
+        currentMutationUrl === "https://gemini.google.com/app" ||
+        currentMutationUrl === "https://claude.ai/new"
+      )
     ) {
-      // if in the mutation window, extend the mutation window and receive it
-      resetTimeout(15000);
+      if (msg.payload.author === "human") {
+        resetTimeout();
+        currentMutationUrl = _sender.tab.url;
+        enableMutation = true;
+      }
+      else {
+        // for AI response, we will end the mutation window after 15s of inactivity, so we don't need to check the author
+        resetTimeout(15000);
+      }
     }
     else {
       return;
     }
   }
+
   if (
     msg.payload.eventType === "pointerdown" ||
     (msg.payload.eventType === "keydown" && msg.payload.key === "Enter")
   ) {
     // Start to capture mutations
     currentMutationUrl = _sender.tab.url;
-
+    enableMutation = true;
     // setTimeout to cancel if no any mutation observed within the delay time
     resetTimeout(15000);
   }
