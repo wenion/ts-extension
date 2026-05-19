@@ -2,6 +2,7 @@ type TabSession = {
   tabId: number;
   url: string;
   status: boolean;
+  loading: boolean;
 
   sessionId: number;
 
@@ -10,21 +11,44 @@ type TabSession = {
 
 const sessions = new Map<number, TabSession>();
 
-export function createTabMutation(tab: chrome.tabs.Tab) {
-  if (!tab.id || !tab.url) return;
+// Page load
+export function startPageLoad(tabId: number, url: string) {
+  if (!tabId || !url) return;
 
   const session: TabSession = {
-    tabId: tab.id,
-    url: tab.url,
-    status: true,
+    tabId: tabId,
+    url: url,
+    status: false,
+    loading: true,
 
     sessionId: 0,
 
     timeoutId: null
   };
 
-  sessions.set(tab.id, session);
+  sessions.set(tabId, session);
 
+  setTimeout(() => finishPageLoad(tabId), 10000); // assume page load finishes in 10 seconds
+}
+
+function finishPageLoad(tabId: number) {
+  const session = sessions.get(tabId);
+  if (!session) return;
+
+  session.loading = false;
+  sessions.set(tabId, session);
+}
+
+// Click or Enter
+export function startTabMutation(tab: chrome.tabs.Tab) {
+  if (!tab.id) return;
+
+  const session = sessions.get(tab.id);
+  if (!session) return;
+  if (session.loading) return;
+
+  session.status = true;
+  sessions.set(tab.id, session);
   reset(session);
 }
 
@@ -34,6 +58,7 @@ export function updateTabMutation(tab: chrome.tabs.Tab) {
   const session = sessions.get(tab.id);
 
   if (!session) return;
+  if (session.loading) return;
 
   if (!session.status) return;
 
@@ -52,6 +77,8 @@ export function checkTabMutation(tab: chrome.tabs.Tab): boolean {
   if (!session) {
     return false;
   }
+
+  if (session.loading) return false;
 
   return session.status;
 }

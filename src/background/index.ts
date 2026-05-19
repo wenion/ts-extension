@@ -20,7 +20,8 @@ import {
   onKeyStroke,
 } from "./googleDocs";
 import {
-  createTabMutation,
+  startPageLoad,
+  startTabMutation,
   updateTabMutation,
   checkTabMutation
 } from "./tabMutation";
@@ -224,7 +225,7 @@ const handleUserEvent = async (
     (msg.payload.eventType === "keydown" && msg.payload.key === "Enter")
   ) {
     // Start to capture mutations
-    createTabMutation(_sender.tab);
+    startTabMutation(_sender.tab);
   }
 
   await traceBuffer.add(
@@ -772,6 +773,7 @@ const handleNavigationEvent = async (
     source: "UserEvent",
   } as UserEventTrace;
   onNavigate(url);
+  startPageLoad(tabId, url);
 
   currentMap.set(url, {
     state: "",
