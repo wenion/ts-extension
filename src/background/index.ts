@@ -19,6 +19,11 @@ import {
   onNavigate,
   onKeyStroke,
 } from "./googleDocs";
+import {
+  createTabMutation,
+  updateTabMutation,
+  checkTabMutation
+} from "./tabMutation";
 
 export type DocState = {
   state: string;
@@ -122,7 +127,6 @@ bus.addEventListener("GOOGLE_DOCS_EVENT", async (e: Event) => {
     }
 
     traceBuffer.add(trace);
-
   }
 });
 
@@ -175,24 +179,6 @@ const traceBuffer = new TraceBuffer<UserEventTrace>(
 );
 
 let token: string | undefined = undefined;
-let enableMutation = false;
-let currentMutationUrl: string | null = null;
-let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-function resetTimeout(duration?: number) {
-  if (timeoutId) {
-    clearTimeout(timeoutId);
-    timeoutId = null;
-  }
-
-  if (duration !== undefined) {
-    timeoutId = setTimeout(() => {
-      currentMutationUrl = null;
-      enableMutation = false;
-      timeoutId = null;
-    }, duration);
-  }
-}
 
 chrome.storage.local.get("token").then(result => {
   token = result.token as string;
@@ -227,28 +213,10 @@ const handleUserEvent = async (
   }
 
   if (msg.payload.eventType === "mutation") {
-    if (
-      enableMutation &&
-      (
-        currentMutationUrl === msg.payload.url ||
-        currentMutationUrl === "https://chatgpt.com/" ||
-        currentMutationUrl === "https://gemini.google.com/app" ||
-        currentMutationUrl === "https://claude.ai/new"
-      )
-    ) {
-      if (msg.payload.author === "human") {
-        resetTimeout();
-        currentMutationUrl = _sender.tab.url;
-        enableMutation = true;
-      }
-      else {
-        // for AI response, we will end the mutation window after 15s of inactivity, so we don't need to check the author
-        resetTimeout(15000);
-      }
-    }
-    else {
+    if (!checkTabMutation(_sender.tab)) {
       return;
     }
+    updateTabMutation(_sender.tab);
   }
 
   if (
@@ -256,10 +224,7 @@ const handleUserEvent = async (
     (msg.payload.eventType === "keydown" && msg.payload.key === "Enter")
   ) {
     // Start to capture mutations
-    currentMutationUrl = _sender.tab.url;
-    enableMutation = true;
-    // setTimeout to cancel if no any mutation observed within the delay time
-    resetTimeout(15000);
+    createTabMutation(_sender.tab);
   }
 
   await traceBuffer.add(
@@ -826,7 +791,8 @@ export function extractTurnNumber(id?: string | null): string | null {
   return match ? match[1] : null;
 }
 
-chrome.runtime.onMessage.addListener(async(msg: any, _sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
+chrome.runtime.onMessage.addListener(
+  async(msg: any, _sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
   if (msg.type === "REMOVE_CONTENT_SCRIPT") {
     sendResponse({ ok: true, from: "content-script", at: now() });
   }

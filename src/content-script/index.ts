@@ -101,7 +101,7 @@ chrome.runtime.sendMessage({
         childList: true, // Watch for addition or removal of child nodes
         // attributes: true, // Watch for changes to attributes
         subtree: true,   // Watch for changes in descendant nodes
-        characterData: true,
+        characterData: true, // Text content changed
       };
       observer = addMutationEventListener(
         document.body,
