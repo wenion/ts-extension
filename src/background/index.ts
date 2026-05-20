@@ -867,6 +867,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     traceBuffer.flush();
   }
 
+  if (changeInfo.status === "complete") {
+    handleNavigationEvent(tabId, tab.url);
+  }
+
   const hasPermission = await checkPermissionGranted(new URL(tab.url));
   if (hasPermission) {
     try {
@@ -911,7 +915,6 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
           });
           chrome.action.setIcon({ imageData: getCapturingIcon(), tabId: details.tabId });
         }
-        handleNavigationEvent(details.tabId, details.url);
       }
       else {
         chrome.action.setIcon({ imageData: getActiveIcon(), tabId: details.tabId });
